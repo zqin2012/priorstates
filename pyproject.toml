@@ -1,0 +1,49 @@
+[build-system]
+# 61 is the floor for PEP 621 [project] support; some 61.x builds mis-handle it
+# and silently produce an "UNKNOWN-0.0.0" wheel, so require a known-good range.
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "priorstates"
+version = "0.1.0"
+description = "Shared memory & research journal for your AI agents — memory + journal + cockpit + runnable-markdown (mdlab) for Claude, Codex, and Gemini."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Zhendong Qin" }]
+keywords = ["ai", "memory", "journal", "mcp", "claude", "codex", "gemini", "mdlab"]
+
+# Hard deps kept minimal: numpy is needed for the embedding store; everything
+# else degrades gracefully (see priorstates/core/embedder.py and journal.py).
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+# Real semantic embeddings (otherwise a built-in hashing fallback is used).
+onnx = ["onnxruntime>=1.16", "tokenizers>=0.15"]
+# Expose tools to agents over MCP.
+mcp = ["mcp>=1.2"]
+# Nicer YAML frontmatter + dataframe journal search.
+extras = ["pyyaml>=6", "pandas>=2"]
+# mdlab python blocks with a persistent Jupyter kernel (optional; an in-process
+# executor is used when these are absent).
+kernel = ["jupyter_client>=8", "ipykernel>=6"]
+full = [
+  "onnxruntime>=1.16", "tokenizers>=0.15", "mcp>=1.2",
+  "pyyaml>=6", "pandas>=2", "jupyter_client>=8", "ipykernel>=6",
+]
+
+[project.scripts]
+priorstates = "priorstates.cli:main"
+
+# A GUI entry point so Windows launches it via pythonw.exe (no console window);
+# on Linux/macOS it behaves like any other console script.
+[project.gui-scripts]
+priorstates-gui = "priorstates.gui.app:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["priorstates*"]
+
+[tool.setuptools.package-data]
+priorstates = ["cockpit/server.js", "cockpit/public/*"]

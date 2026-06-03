@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PriorStates — shared memory & research journal for your AI agents</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="topbar">
+    <button id="back" class="nav" title="Back" disabled>←</button>
+    <button id="fwd" class="nav" title="Forward" disabled>→</button>
+    <div class="brand" title="Shared memory &amp; research journal for your AI agents">🔭 PriorStates <small id="rootlbl"></small></div>
+    <div class="sp"></div>
+    <span id="wsopen" class="wsopen"></span>
+    <input class="search" id="search" type="search" placeholder="Filter…" autocomplete="off">
+    <button id="refresh" title="Reload">↻</button>
+  </div>
+  <div class="main">
+    <div class="side">
+      <div class="tabs">
+        <div class="tab active" data-view="journal">Journal <span class="n" id="cnt-journal"></span></div>
+        <div class="tab" data-view="docs">Docs <span class="n" id="cnt-docs"></span></div>
+        <div class="tab" data-view="memory">Memory <span class="n" id="cnt-memory"></span></div>
+      </div>
+      <div class="viewctl" id="viewctl"></div>
+      <div class="tree" id="tree"></div>
+    </div>
+    <div class="content" id="content"><div class="placeholder">Pick a journal entry or memory.</div></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
