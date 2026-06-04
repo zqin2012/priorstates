@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PriorStates — shared memory & research journal for your AI agents</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="vendor/xterm.css">
 </head>
 <body>
   <div class="topbar">
@@ -25,12 +26,15 @@
         <div class="tab active" data-view="journal">Journal <span class="n" id="cnt-journal"></span></div>
         <div class="tab" data-view="memory">Memory <span class="n" id="cnt-memory"></span></div>
         <div class="tab" data-view="docs">Docs <span class="n" id="cnt-docs"></span></div>
+        <div class="tab" data-view="term" id="tab-term" hidden>Terminal</div>
       </div>
       <div class="viewctl" id="viewctl"></div>
       <div class="tree" id="tree"></div>
     </div>
     <div class="content" id="content"><div class="placeholder">Pick a journal entry or memory.</div></div>
   </div>
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/xterm-addon-fit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

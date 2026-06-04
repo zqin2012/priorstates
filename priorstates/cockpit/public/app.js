@@ -73,6 +73,7 @@ async function boot() {
   $('#cnt-journal').textContent = `(${journal.length})`;
   $('#cnt-memory').textContent = `(${memory.length})`;
   $('#cnt-docs').textContent = `(${docs.count})`;
+  if (meta.allow_terminal) { const tt = $('#tab-term'); if (tt) tt.hidden = false; }
   bind();
   renderWorkspaceOpen();
   render();
@@ -240,9 +241,52 @@ function render() {
   } else if (state.view === 'docs') {
     $('#viewctl').append(el('span', { class: 'lbl' }, 'research docs in this project, by folder'));
     renderDocs(q);
+  } else if (state.view === 'term') {
+    $('#viewctl').append(el('span', { class: 'lbl' }, 'a shell on this machine — run claude / codex / gemini here'));
+    renderTerminal();
   } else {
     $('#viewctl').append(el('span', { class: 'lbl' }, '📌 pinned shown first'));
     renderMemoryList(q);
+  }
+}
+
+// ── Embedded terminal (xterm.js ↔ SSE/POST ↔ python pty) ──
+var TERM = null, TERM_SID = null, TERM_ES = null, FIT = null;
+function renderTerminal() {
+  $('#tree').innerHTML = '';
+  var c = $('#content'); c.innerHTML = ''; c.style.position = 'relative';
+  if (!window.Terminal || !window.FitAddon) { c.innerHTML = '<div class="placeholder">terminal assets unavailable</div>'; return; }
+  var host = el('div', { style: 'position:absolute;inset:0;padding:8px;background:#0a0d12' });
+  c.append(host);
+  if (!TERM) {
+    TERM = new window.Terminal({ fontSize: 13, cursorBlink: true,
+      fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
+      theme: { background: '#0a0d12', foreground: '#c9d1d9' } });
+    FIT = new window.FitAddon.FitAddon(); TERM.loadAddon(FIT);
+  }
+  TERM.open(host);
+  try { FIT.fit(); } catch (_) {}
+  if (!TERM_SID) {
+    post('/api/term/new', {}).then(function (r) {
+      if (!r || r.error) { host.innerHTML = '<div class="placeholder">terminal: ' + ((r && r.error) || 'failed') + '</div>'; return; }
+      TERM_SID = r.sid;
+      TERM.onData(function (d) { fetch('/api/term/' + TERM_SID + '/input', { method: 'POST', body: d }); });
+      TERM.onResize(function (s) { post('/api/term/' + TERM_SID + '/resize', { cols: s.cols, rows: s.rows }); });
+      TERM_ES = new EventSource('/api/term/' + TERM_SID + '/stream');
+      TERM_ES.onmessage = function (e) {
+        try { TERM.write(Uint8Array.from(atob(e.data), function (ch) { return ch.charCodeAt(0); })); } catch (_) {}
+      };
+      try { FIT.fit(); } catch (_) {}
+      post('/api/term/' + TERM_SID + '/resize', { cols: TERM.cols, rows: TERM.rows });
+      TERM.focus();
+    });
+  } else {
+    try { FIT.fit(); } catch (_) {}
+    TERM.focus();
+  }
+  if (!renderTerminal._resize) {
+    renderTerminal._resize = true;
+    window.addEventListener('resize', function () { if (state.view === 'term' && FIT) { try { FIT.fit(); } catch (_) {} } });
   }
 }
 function renderDocs(q) {

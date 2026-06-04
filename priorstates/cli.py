@@ -333,6 +333,9 @@ def cmd_cockpit(args):
     if getattr(args, "allow_write", False):
         env["PS_ALLOW_WRITE"] = "1"
         print("  writes + mdlab run: enabled (code runs on THIS host)")
+    if getattr(args, "terminal", False):
+        env["PS_ALLOW_TERMINAL"] = "1"
+        print("  terminal: enabled (a shell in the browser, on THIS host)")
     import shutil
     node = shutil.which("node") or shutil.which("node.exe")
     if not node:
@@ -508,9 +511,10 @@ def cmd_connect(args):
     # are passed through to the cockpit so the browser knows where to call.
     opener_port = _start_local_opener(host)
     proj = f" --project {shlex.quote(args.project)}" if args.project else ""
+    term = " --terminal" if getattr(args, "terminal", False) else ""
     remote_cmd = (f"sh -lc 'PATH=$HOME/.local/bin:$PATH PS_SSH_HOST={host} "
                   f"PS_OPENER_PORT={opener_port} {runner} cockpit "
-                  f"--host 127.0.0.1 --port {rport} --allow-write --allow-open{proj}'")
+                  f"--host 127.0.0.1 --port {rport} --allow-write --allow-open{term}{proj}'")
 
     # 3) SSH with a port-forward; the cockpit (and any code it runs) lives on the
     #    remote; only the rendered UI comes back over the tunnel.
@@ -828,6 +832,8 @@ def build_parser():
     pc = sub.add_parser("cockpit", help="launch the web cockpit")
     pc.add_argument("--port", type=int, default=7700); pc.add_argument("--host", default="127.0.0.1")
     pc.add_argument("--project", help="project root to show (default: auto-detect from cwd)")
+    pc.add_argument("--terminal", action="store_true",
+                    help="enable the embedded terminal (a real shell in the browser, on this host)")
     pc.add_argument("--allow-open", action="store_true",
                     help="enable 'Open in editor' buttons (launches VSCode/Antigravity/… on the host)")
     pc.add_argument("--allow-write", action="store_true",
@@ -842,6 +848,8 @@ def build_parser():
     pcn.add_argument("--remote-port", type=int, help="remote port (default: same as --port)")
     pcn.add_argument("--install", action="store_true",
                      help="(re)ship PriorStates to the host even if already present")
+    pcn.add_argument("--terminal", action="store_true",
+                     help="enable the embedded terminal in the remote cockpit (a shell on the server)")
     pcn.set_defaults(func=cmd_connect)
 
     pg = sub.add_parser("gui", help="launch the desktop control panel")

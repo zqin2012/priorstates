@@ -10,6 +10,7 @@ const path = require('path');
 const os = require('os');
 const url = require('url');
 const cp = require('child_process');
+const crypto = require('crypto');
 
 // Opt-in: launch a file/folder in a local editor. Off unless --allow-open
 // (PS_ALLOW_OPEN=1). Side-effecting, so it stays opt-in like the rest of the
@@ -19,7 +20,11 @@ const ALLOW_OPEN = process.env.PS_ALLOW_OPEN === '1';
 // engine ON THIS HOST — so when the cockpit runs on a remote server, code runs
 // there (the research env). Opt-in, like open.
 const ALLOW_WRITE = process.env.PS_ALLOW_WRITE === '1';
+// Embedded terminal (a real shell in the browser) — opt-in, off by default.
+const ALLOW_TERMINAL = process.env.PS_ALLOW_TERMINAL === '1';
 const PS_PYTHON = process.env.PS_PYTHON || 'python3';
+const PTY_BRIDGE = path.join(__dirname, 'ptybridge.py');
+const TERMS = new Map();   // sid → { proc }
 // Set when this cockpit is being served to a client over `priorstates connect`.
 // Tells the browser to open files in the LOCAL editor via a vscode-remote:// URL
 // (running `code` on this remote host can't reach the user's editor / display).
@@ -289,6 +294,57 @@ function apiCapture(res, kind, text) {
       : sendJson(res, { ok: true, result: String(stdout).trim() }));
 }
 
+// ---- embedded terminal (xterm.js ↔ SSE/POST ↔ python pty bridge) ---------
+function termFrame(proc, type, payload) {       // [len][type][payload] on the bridge's stdin
+  const p = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload));
+  const body = Buffer.concat([Buffer.from(type), p]);
+  const len = Buffer.alloc(4); len.writeUInt32BE(body.length, 0);
+  try { proc.stdin.write(Buffer.concat([len, body])); } catch (_) {}
+}
+function apiTermNew(res) {
+  if (!ALLOW_TERMINAL) return send(res, 403, JSON.stringify({ error: 'terminal disabled — start the cockpit with PS_ALLOW_TERMINAL=1' }));
+  const sid = crypto.randomBytes(12).toString('hex');
+  const shell = process.env.SHELL || '/bin/bash';
+  const env = Object.assign({}, process.env, { TERM: 'xterm-256color' });
+  let proc;
+  try {
+    proc = cp.spawn(PS_PYTHON, [PTY_BRIDGE, shell], { cwd: PROJECT_ROOT || HOME, env });
+  } catch (e) {
+    return send(res, 500, JSON.stringify({ error: String((e && e.message) || e) }));
+  }
+  TERMS.set(sid, { proc });
+  proc.on('exit', () => { const s = TERMS.get(sid); if (s && s.sse) { try { s.sse.end(); } catch (_) {} } TERMS.delete(sid); });
+  sendJson(res, { sid });
+}
+function apiTermStream(res, req, sid) {
+  const s = TERMS.get(sid);
+  if (!s) return send(res, 404, 'no such terminal', 'text/plain');
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache',
+    Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  res.write(':ok\n\n');
+  s.sse = res;
+  const onData = (d) => { try { res.write('data: ' + d.toString('base64') + '\n\n'); } catch (_) {} };
+  s.proc.stdout.on('data', onData);
+  req.on('close', () => {
+    s.proc.stdout.removeListener('data', onData);
+    try { s.proc.kill(); } catch (_) {}
+    TERMS.delete(sid);
+  });
+}
+function apiTermInput(res, sid, buf) {
+  const s = TERMS.get(sid);
+  if (!s) return send(res, 404, JSON.stringify({ error: 'no such terminal' }));
+  termFrame(s.proc, 'i', buf || Buffer.alloc(0));
+  sendJson(res, { ok: true });
+}
+function apiTermResize(res, sid, body) {
+  const s = TERMS.get(sid);
+  if (!s) return send(res, 404, JSON.stringify({ error: 'no such terminal' }));
+  const cols = parseInt(body.cols, 10) || 80, rows = parseInt(body.rows, 10) || 24;
+  termFrame(s.proc, 'r', cols + ',' + rows);
+  sendJson(res, { ok: true });
+}
+
 // Read a raw (binary) request body, capped — for uploading a .psworkspace.
 function readRawBody(req, cb) {
   const chunks = []; let n = 0;
@@ -390,11 +446,16 @@ const server = http.createServer((req, res) => {
         if (u.query.url) return apiImport(res, u.query.url, null);
         return readRawBody(req, (buf) => apiImport(res, null, buf));
       }
+      if (p === '/api/term/new') return apiTermNew(res);
+      let mt = p.match(/^\/api\/term\/([a-f0-9]+)\/input$/);
+      if (mt) return readRawBody(req, (buf) => apiTermInput(res, mt[1], buf));
+      mt = p.match(/^\/api\/term\/([a-f0-9]+)\/resize$/);
+      if (mt) return readBody(req, (b) => apiTermResize(res, mt[1], b));
       return send(res, 404, 'not found', 'text/plain');
     }
     if (p === '/') return serveStatic(res, 'index.html');
     if (p === '/api/meta') return sendJson(res, { home: HOME, project_root: PROJECT_ROOT,
-      has_journal: !!JOURNAL_DIR, allow_open: ALLOW_OPEN, allow_write: ALLOW_WRITE,
+      has_journal: !!JOURNAL_DIR, allow_open: ALLOW_OPEN, allow_write: ALLOW_WRITE, allow_terminal: ALLOW_TERMINAL,
       editors: EDITORS, ssh_host: SSH_HOST, opener_port: OPENER_PORT });
     if (p === '/api/journal') return sendJson(res, loadJournal());
     if (p === '/api/memory') return sendJson(res, loadMemory());
@@ -403,7 +464,9 @@ const server = http.createServer((req, res) => {
     if (p === '/api/open') return apiOpen(res, u.query.app, u.query.path);
     if (p === '/api/mdlab/run') return apiMdlabRun(res, u.query.path);
     if (p === '/api/workspace/export') return apiExport(res);
-    if (/^\/[\w.-]+$/.test(p)) return serveStatic(res, p.slice(1));
+    const ts = p.match(/^\/api\/term\/([a-f0-9]+)\/stream$/);
+    if (ts) return apiTermStream(res, req, ts[1]);
+    if (/^\/[\w./-]+$/.test(p) && !p.includes('..')) return serveStatic(res, p.slice(1));
     return send(res, 404, 'not found', 'text/plain');
   } catch (e) { return send(res, 500, JSON.stringify({ error: String(e && e.message || e) })); }
 });

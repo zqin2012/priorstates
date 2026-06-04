@@ -1214,7 +1214,8 @@ class PriorStatesGUI:
         env["PS_PORT"] = str(port)
         env["PS_HOST"] = "127.0.0.1"
         env["PS_PYTHON"] = sys.executable
-        env["PS_ALLOW_WRITE"] = "1"   # GUI is the trusted local control plane → enable cockpit capture
+        env["PS_ALLOW_WRITE"] = "1"      # GUI is the trusted local control plane → enable cockpit capture
+        env["PS_ALLOW_TERMINAL"] = "1"   # …and the embedded terminal (your own machine)
         if want_open:
             env["PS_ALLOW_OPEN"] = "1"
         try:
