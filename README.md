@@ -107,6 +107,11 @@ an autonomous `priorstates research` runner are next.
 
 Issues and PRs welcome.
 
+## Get in touch
+
+Questions, ideas, or feedback — **[hello@priorstates.com](mailto:hello@priorstates.com)**.
+Bug reports and feature requests are welcome as GitHub issues.
+
 ## License
 
 **Apache-2.0** (permissive + patent grant). See [LICENSE](LICENSE) and [NOTICE](NOTICE).
