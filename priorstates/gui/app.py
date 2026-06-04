@@ -921,7 +921,7 @@ class PriorStatesGUI:
         db = ttk.Button(footer, text="Docs", style="Ws.TButton", command=self.open_docs)
         db.pack(side="right", padx=6)
         self._tip(db, "Open the PriorStates documentation in your browser.")
-        ub = ttk.Button(footer, text="⭯ Update", style="Ws.TButton", command=self.update_software)
+        ub = ttk.Button(footer, text="Update", style="Ws.TButton", command=self.update_software)
         ub.pack(side="right", padx=6)
         self._tip(ub, "Reinstall the latest PriorStates from GitHub (restart the app afterward).")
 
