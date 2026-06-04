@@ -316,11 +316,12 @@ class PriorStatesGUI:
             ck.pack(side="left", padx=(2, 16), pady=3)
             self._tip(ck, "Open the local web cockpit — browse and add memory, journal and docs.")
 
-        def add_group(header, group):
+        def add_group(group, lead_gap=False):
             shown = [t for t in group if t[0] in present]
             if not shown:
                 return False
-            ttk.Label(bar, text=header, style="LaunchHdr.TLabel").pack(side="left", padx=(2, 8))
+            if lead_gap:                       # a little air between agents and editors
+                ttk.Frame(bar, style="Launch.TFrame").pack(side="left", padx=8)
             for key, label, _b, _kind, wa in shown:
                 unwired = wa and wired is not None and key not in wired
                 txt = label + " ⚠" if unwired else label
@@ -332,8 +333,8 @@ class PriorStatesGUI:
                           if unwired else "Open %s in this workspace." % label)
             return True
 
-        any_agent = add_group("LAUNCH AGENT", [t for t in targets if t[4]])
-        add_group("OPEN IN", [t for t in targets if not t[4]])
+        any_agent = add_group([t for t in targets if t[4]])
+        add_group([t for t in targets if not t[4]], lead_gap=any_agent)
         if not present:
             ttk.Label(bar, text="no agent CLI or editor found on PATH",
                       style="LaunchHint.TLabel").pack(side="left", padx=4)
