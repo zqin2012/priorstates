@@ -52,7 +52,7 @@ built-in CPU hashing embedder works out of the box.
 |---|---|---|
 | 🧠 | **memory** | A local semantic store. Save a fact once — any future session recalls it *by meaning*. Pinned facts are injected into every session. |
 | 📓 | **journal** | An append-only research log. Every winner, loser, bug &amp; decision becomes a searchable entry, so no experiment is run twice. |
-| 🛰️ | **cockpit** | A dependency-free local web app that maps your memory, journal &amp; docs — search, group, dashboards. Embedded **terminal** (on by default for a local cockpit; `--no-terminal` to disable) to run your agent CLIs right in the browser. |
+| 🛰️ | **cockpit** | A no-npm-install local web app that maps your memory, journal &amp; docs — search, group, dashboards. Embedded **terminal** (on by default for a local cockpit; `--no-terminal` to disable) to run your agent CLIs right in the browser. *Needs **Node.js** — the only part that does; everything else is pure Python.* |
 | 📝 | **mdlab** | Runnable Markdown: interleave prose, code &amp; results in one file and splice output back in. |
 
 All of it is wired into your agents over the open **[MCP](https://modelcontextprotocol.io/)**

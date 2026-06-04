@@ -270,7 +270,7 @@ class PriorStatesGUI:
             try:
                 out = subprocess.run(
                     ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=6", host, cmd],
-                    capture_output=True, text=True, timeout=14)
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=14)
                 found = set(out.stdout.split())
             except Exception:
                 cache.pop(host, None)           # couldn't probe → stay optimistic, retry later
@@ -470,7 +470,7 @@ class PriorStatesGUI:
     def _gui_state(self):
         import json
         try:
-            return json.loads(self._gui_state_path().read_text())
+            return json.loads(self._gui_state_path().read_text(encoding="utf-8"))
         except Exception:
             return {}
 
@@ -522,7 +522,7 @@ class PriorStatesGUI:
         try:
             p = self._gui_state_path()
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(json.dumps(st, indent=2))
+            p.write_text(json.dumps(st, indent=2), encoding="utf-8")
         except Exception:
             pass
 
@@ -594,7 +594,7 @@ class PriorStatesGUI:
                 (p / PROJECT_MARKER / "journal" / "entries").mkdir(parents=True, exist_ok=True)
                 cfgp = p / PROJECT_MARKER / "config.toml"
                 if not cfgp.exists():
-                    cfgp.write_text("# Project overrides for PriorStates.\n")
+                    cfgp.write_text("# Project overrides for PriorStates.\n", encoding="utf-8")
             except OSError as e:
                 messagebox.showerror("PriorStates", f"Could not initialize:\n{e}")
                 return
@@ -663,7 +663,7 @@ class PriorStatesGUI:
             except Exception:
                 pass
         try:
-            p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
         except Exception as e:
             self.set_status(f"connect failed: {e}")
             return None
@@ -710,7 +710,7 @@ class PriorStatesGUI:
         try:
             p = self._gui_state_path()
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(json.dumps(st, indent=2))
+            p.write_text(json.dumps(st, indent=2), encoding="utf-8")
         except Exception:
             pass
 
@@ -1221,10 +1221,20 @@ class PriorStatesGUI:
         env["PS_ALLOW_TERMINAL"] = "1"   # …and the embedded terminal (your own machine)
         if want_open:
             env["PS_ALLOW_OPEN"] = "1"
+        if not shutil.which("node"):
+            from tkinter import messagebox
+            self.set_status("Node.js not found — the cockpit needs it (nothing else does)")
+            messagebox.showinfo(
+                "Node.js needed for the cockpit",
+                "The web cockpit is served by Node.js, which isn't installed.\n\n"
+                "Node is used by the cockpit ONLY — memory, journal, agents and this "
+                "GUI all work without it.\n\n"
+                "Install Node.js from https://nodejs.org, then click Open Cockpit again.")
+            return
         try:
             proc = subprocess.Popen(["node", str(server)], env=env)
         except FileNotFoundError:
-            self.set_status("node not found — install Node.js to use the cockpit")
+            self.set_status("Node.js not found — install it from nodejs.org to use the cockpit")
             return
         cks[key] = {"proc": proc, "port": port, "allow_open": want_open}
         self.root.after(900, lambda p=port: webbrowser.open(f"http://127.0.0.1:{p}/"))
@@ -1260,7 +1270,7 @@ class PriorStatesGUI:
         self.set_status("Updating PriorStates from GitHub… (see console)")
 
         def go():
-            return subprocess.run(cmd, capture_output=True, text=True)
+            return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
         def done(p):
             print(p.stdout or "", p.stderr or "")

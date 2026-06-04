@@ -49,7 +49,7 @@ def _run_python(body: str, ns: dict, cwd: Path) -> tuple[str, str]:
 def _run_bash(body: str, cwd: Path) -> tuple[str, str]:
     try:
         r = subprocess.run(["bash", "-c", body], cwd=str(cwd),
-                           capture_output=True, text=True, timeout=600)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
         text = (r.stdout + r.stderr).rstrip("\n")
         return ("output" if r.returncode == 0 else "error"), text
     except Exception as e:
@@ -93,7 +93,7 @@ def _run_prompt(body: str, config, cwd: Path) -> tuple[str, str]:
     flag = "-p" if cli in ("claude",) else "-p"
     try:
         r = subprocess.run([cli, flag, body], cwd=str(cwd),
-                           capture_output=True, text=True, timeout=600)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
         return ("result" if r.returncode == 0 else "error"), (r.stdout or r.stderr).strip()
     except Exception as e:
         return "error", str(e)

@@ -107,7 +107,7 @@ def _compute_id(topic: str, date_str: str, body: str) -> str:
 def _git_head(repo: Path) -> str | None:
     try:
         r = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
-                           capture_output=True, text=True, timeout=5)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
         return r.stdout.strip()[:12] if r.returncode == 0 else None
     except Exception:
         return None
@@ -200,7 +200,7 @@ def _entry_to_file(e: Entry) -> str:
 
 def _parse_entry_file(path: Path) -> Entry | None:
     try:
-        text = path.read_text(errors="replace")
+        text = path.read_text(errors="replace", encoding="utf-8")
     except Exception:
         return None
     meta, body = _split_frontmatter_body(text)
@@ -248,14 +248,14 @@ def regenerate_index(config) -> None:
     entries = sorted(all_entries(config), key=lambda e: e.date, reverse=True)
     body = "\n".join(_index_line(e) for e in entries) or "_No entries yet._"
     idx = jd / "INDEX.md"
-    cur = idx.read_text() if idx.exists() else ""
+    cur = idx.read_text(encoding="utf-8") if idx.exists() else ""
     if _INDEX_START in cur and _INDEX_END in cur:
         before, _, rest = cur.partition(_INDEX_START)
         _, _, after = rest.partition(_INDEX_END)
         new = f"{before}{_INDEX_START}\n{body}\n{_INDEX_END}{after}"
     else:
         new = f"# Journal — research findings index\n\n{_INDEX_START}\n{body}\n{_INDEX_END}\n"
-    idx.write_text(new)
+    idx.write_text(new, encoding="utf-8")
 
 
 def regenerate_views(config) -> None:
@@ -282,13 +282,13 @@ def regenerate_views(config) -> None:
                 cur_out = e.outcome
                 lines += ["", f"## {cur_out}", ""]
             lines.append(f"- {e.date} [{e.title}](../entries/{e.id}.md) — {e.tldr}")
-        (bt / f"{_safe_topic(topic)}.md").write_text("\n".join(lines) + "\n")
+        (bt / f"{_safe_topic(topic)}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     rd = ["# Topics", "", "| topic | entries | last |", "|---|--:|---|"]
     for topic in sorted(by_topic, key=lambda t: -len(by_topic[t])):
         es = by_topic[topic]
         last = max(e.date for e in es)
         rd.append(f"| [{topic}]({_safe_topic(topic)}.md) | {len(es)} | {last} |")
-    (bt / "README.md").write_text("\n".join(rd) + "\n")
+    (bt / "README.md").write_text("\n".join(rd) + "\n", encoding="utf-8")
 
     # digests
     dg = jd / "digests"
@@ -306,11 +306,11 @@ def regenerate_views(config) -> None:
             lines += ["", f"## {topic}", ""]
             for e in sorted(per_topic[topic], key=lambda e: (okey(e.outcome), e.date)):
                 lines.append(f"- [{e.outcome}] [{e.title}](../entries/{e.id}.md) — {e.tldr}")
-        (dg / f"{month}.md").write_text("\n".join(lines) + "\n")
+        (dg / f"{month}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     dr = ["# Digests", "", "| month | entries |", "|---|--:|"]
     for month in sorted(by_month, reverse=True):
         dr.append(f"| [{month}]({month}.md) | {len(by_month[month])} |")
-    (dg / "README.md").write_text("\n".join(dr) + "\n")
+    (dg / "README.md").write_text("\n".join(dr) + "\n", encoding="utf-8")
 
 
 def regenerate_all(config) -> None:
@@ -359,7 +359,7 @@ def add(config, *, topic: str, outcome: str, title: str, body: str,
         supersedes=supersedes or None, superseded_by=None,
         commits=_commits(config), body=body.strip(), path=target, extras=extras or {},
     )
-    target.write_text(_entry_to_file(entry))
+    target.write_text(_entry_to_file(entry), encoding="utf-8")
 
     if entry.supersedes:
         pp = edir / f"{entry.supersedes}.md"
@@ -367,7 +367,7 @@ def add(config, *, topic: str, outcome: str, title: str, body: str,
             prior = _parse_entry_file(pp)
             if prior and prior.superseded_by != entry.id:
                 prior.superseded_by = entry.id
-                pp.write_text(_entry_to_file(prior))
+                pp.write_text(_entry_to_file(prior), encoding="utf-8")
     regenerate_all(config)
     return entry
 

@@ -88,17 +88,24 @@ $Scripts = (Py -c "import sysconfig;print(sysconfig.get_path('scripts'))").Trim(
 $GuiExe  = Join-Path $Scripts "priorstates-gui.exe"
 $CliExe  = Join-Path $Scripts "priorstates.exe"
 
-if (-not $NoShortcuts -and (Test-Path $GuiExe)) {
-  Write-Host "==> creating shortcuts"
-  $ws = New-Object -ComObject WScript.Shell
-  foreach ($dir in @(
-      [Environment]::GetFolderPath("Programs"),
-      [Environment]::GetFolderPath("Desktop"))) {
-    $lnk = $ws.CreateShortcut((Join-Path $dir "PriorStates.lnk"))
-    $lnk.TargetPath = $GuiExe
-    $lnk.IconLocation = $GuiExe
-    $lnk.Description = "PriorStates - shared memory & research journal for your AI agents"
-    $lnk.Save()
+if (-not $NoShortcuts) {
+  if (Test-Path $GuiExe) {
+    Write-Host "==> creating shortcuts"
+    $ws = New-Object -ComObject WScript.Shell
+    foreach ($dir in @(
+        [Environment]::GetFolderPath("Programs"),
+        [Environment]::GetFolderPath("Desktop"))) {
+      $lnk = $ws.CreateShortcut((Join-Path $dir "PriorStates.lnk"))
+      $lnk.TargetPath = $GuiExe
+      $lnk.IconLocation = $GuiExe
+      $lnk.Description = "PriorStates - shared memory & research journal for your AI agents"
+      $lnk.Save()
+    }
+  } else {
+    # priorstates-gui.exe not found (e.g. a non-standard scripts dir) -- let the
+    # CLI build the Start Menu + Desktop shortcut itself (pythonw -m priorstates gui).
+    Write-Host "==> creating shortcuts (via install-launcher)"
+    Py -m priorstates install-launcher --desktop
   }
 }
 

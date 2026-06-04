@@ -25,7 +25,7 @@ def cmd_init(args):
     home.mkdir(parents=True, exist_ok=True)
     cfg_path = home / "config.toml"
     if not cfg_path.exists():
-        cfg_path.write_text(DEFAULT_CONFIG_TOML)
+        cfg_path.write_text(DEFAULT_CONFIG_TOML, encoding="utf-8")
         print(f"wrote {cfg_path}")
     (home / "memory").mkdir(exist_ok=True)
     (home / "models").mkdir(exist_ok=True)
@@ -36,7 +36,7 @@ def cmd_init(args):
         (pdir / "memory").mkdir(parents=True, exist_ok=True)
         (pdir / "journal" / "entries").mkdir(parents=True, exist_ok=True)
         if not (pdir / "config.toml").exists():
-            (pdir / "config.toml").write_text("# Project overrides for PriorStates.\n")
+            (pdir / "config.toml").write_text("# Project overrides for PriorStates.\n", encoding="utf-8")
         print(f"initialized project scope at {pdir}")
 
     if args.download_model:
@@ -254,11 +254,11 @@ def cmd_workspace(args):
             sys.exit(1)
         pubf = cfg.home / "published.json"
         try:
-            reg = json.loads(pubf.read_text()) if pubf.exists() else {}
+            reg = json.loads(pubf.read_text(encoding="utf-8")) if pubf.exists() else {}
         except Exception:
             reg = {}
         reg[res["id"]] = {"url": res["url"], "token": res["token"], "name": args.name or ""}
-        pubf.write_text(json.dumps(reg, indent=2))
+        pubf.write_text(json.dumps(reg, indent=2), encoding="utf-8")
         print(f"published → {res['url']}")
         print(f"install:    priorstates workspace install {res['url']}")
         if res.get("listed"):
@@ -486,7 +486,7 @@ def cmd_connect(args):
     probe = subprocess.run(
         SSH + [host, "sh -lc 'command -v priorstates >/dev/null 2>&1 && echo OK || "
                "(python3 -c \"import priorstates\" >/dev/null 2>&1 && echo MOD || echo MISSING)'"],
-        text=True, stdout=subprocess.PIPE)
+        text=True, encoding="utf-8", errors="replace", stdout=subprocess.PIPE)
     if probe.returncode != 0:
         print(f"cannot ssh to {host} (auth/network failed).", file=sys.stderr)
         sys.exit(1)
@@ -508,7 +508,7 @@ def cmd_connect(args):
         b64 = base64.b64encode(code.encode()).decode()
         rp = subprocess.run(
             SSH + [host, f"python3 -c \"import base64;exec(base64.b64decode('{b64}').decode())\""],
-            capture_output=True, text=True)
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
         out = (rp.stdout or "").strip()
         rport = int(out) if out.isdigit() else 7765
 
@@ -613,7 +613,7 @@ def _xdg_data_home() -> Path:
 
 def _xdg_desktop_dir() -> Path:
     try:
-        r = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True, text=True, timeout=5)
+        r = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
         if r.returncode == 0 and r.stdout.strip():
             return Path(r.stdout.strip())
     except Exception:
@@ -681,9 +681,10 @@ def _refresh_icon_cache(base: Path):
     if not idx.exists():
         sys_idx = Path("/usr/share/icons/hicolor/index.theme")
         try:
-            idx.write_text(sys_idx.read_text() if sys_idx.exists()
+            idx.write_text(sys_idx.read_text(encoding="utf-8") if sys_idx.exists()
                            else "[Icon Theme]\nName=Hicolor\nDirectories=scalable/apps\n"
-                                "[scalable/apps]\nSize=256\nType=Scalable\nContext=Applications\n")
+                                "[scalable/apps]\nSize=256\nType=Scalable\nContext=Applications\n",
+                           encoding="utf-8")
         except OSError:
             pass
     for tool in ("gtk-update-icon-cache", "gtk4-update-icon-cache"):
@@ -693,12 +694,83 @@ def _refresh_icon_cache(base: Path):
             break
 
 
+def _windows_pythonw() -> str:
+    # pythonw.exe launches the Tkinter GUI with no console window; fall back to the
+    # plain interpreter if a windowed build isn't alongside it.
+    exe = Path(sys.executable)
+    pyw = exe.with_name("pythonw.exe")
+    return str(pyw if pyw.exists() else exe)
+
+
+def _run_powershell(script: str):
+    return subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+         "-Command", script],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+
+
+def cmd_install_launcher_windows(args):
+    """Create a real Start-Menu (and optional Desktop) shortcut on Windows.
+
+    Uses WScript.Shell via PowerShell so there's no pywin32 dependency. The
+    shortcut runs `pythonw -m priorstates gui` (no console window). GetFolderPath
+    resolves OneDrive-redirected Start Menu / Desktop folders correctly.
+    """
+    def ps_q(s: str) -> str:           # single-quote PowerShell literal
+        return "'" + s.replace("'", "''") + "'"
+
+    if args.uninstall:
+        script = (
+            "$paths=@([Environment]::GetFolderPath('Programs')+'\\PriorStates.lnk',"
+            "[Environment]::GetFolderPath('Desktop')+'\\PriorStates.lnk');"
+            "foreach($p in $paths){if(Test-Path $p){Remove-Item $p -Force;"
+            "Write-Output ('removed '+$p)}}")
+        r = _run_powershell(script)
+        print((r.stdout or "").strip() or "(nothing to remove)")
+        if r.returncode != 0 and r.stderr.strip():
+            print(r.stderr.strip())
+        return
+
+    target = _windows_pythonw()
+    workdir = str(Path.home())
+    desktop_line = (
+        "$paths+=[Environment]::GetFolderPath('Desktop')+'\\PriorStates.lnk';"
+        if args.desktop else "")
+    script = (
+        "$ws=New-Object -ComObject WScript.Shell;"
+        "$progs=[Environment]::GetFolderPath('Programs');"
+        "$paths=@($progs+'\\PriorStates.lnk');"
+        f"{desktop_line}"
+        "foreach($p in $paths){"
+        "$sc=$ws.CreateShortcut($p);"
+        f"$sc.TargetPath={ps_q(target)};"
+        "$sc.Arguments='-m priorstates gui';"
+        f"$sc.WorkingDirectory={ps_q(workdir)};"
+        "$sc.Description='PriorStates - AI memory & journal cockpit';"
+        "$sc.Save();Write-Output $p}")
+    r = _run_powershell(script)
+    if r.returncode == 0:
+        for line in (r.stdout or "").splitlines():
+            if line.strip():
+                print(f"installed shortcut -> {line.strip()}")
+        print("\nFind 'PriorStates' in the Start menu (or on your Desktop). Remove it with:")
+        print("  priorstates install-launcher --uninstall")
+    else:
+        print("could not create the Windows shortcut automatically.")
+        if r.stderr.strip():
+            print(r.stderr.strip())
+        print(f"You can always run the GUI with:  \"{target}\" -m priorstates gui")
+
+
 def cmd_install_launcher(args):
+    if os.name == "nt":
+        return cmd_install_launcher_windows(args)
     if sys.platform != "linux":
-        where = ("packaging\\windows\\install.ps1 (or the Setup .exe)" if os.name == "nt"
-                 else "the macOS .pkg / `brew install` (creates PriorStates.app)")
-        print("install-launcher builds a freedesktop .desktop entry, which is Linux-only.")
-        print(f"On this platform the GUI shortcut is created by {where}.")
+        # macOS: the .pkg / `brew install` ships a PriorStates.app bundle; a bare
+        # pip install has no app wrapper, so just tell the user how to launch.
+        print("install-launcher builds a Linux .desktop entry / Windows shortcut.")
+        print("On macOS the GUI shortcut comes from the .pkg or `brew install` "
+              "(creates PriorStates.app).")
         print("You can always run the GUI with:  priorstates gui")
         return
     data = _xdg_data_home()
@@ -874,6 +946,14 @@ def build_parser():
 
 
 def main(argv=None):
+    # On Windows the console defaults to a legacy code page (e.g. cp1252); printing
+    # the status glyphs we use (✓ → · 📌) would raise UnicodeEncodeError. Force the
+    # std streams to UTF-8 and never crash on an un-encodable character.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     args = build_parser().parse_args(argv)
     args.func(args)
 
