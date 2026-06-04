@@ -46,4 +46,4 @@ where = ["."]
 include = ["priorstates*"]
 
 [tool.setuptools.package-data]
-priorstates = ["cockpit/server.js", "cockpit/public/*"]
+priorstates = ["cockpit/server.js", "cockpit/public/*", "data/*.psworkspace"]

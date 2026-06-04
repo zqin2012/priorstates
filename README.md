@@ -89,6 +89,26 @@ default embedder is **CPU-only and offline** — no API keys, no telemetry, no c
 calls. Upgrade to semantic recall with a single optional ~127&nbsp;MB model download
 whenever you want.
 
+## Share a workspace
+
+Export your memory + journal as a portable bundle and hand it to a teammate (or
+host it anywhere — any file or URL works):
+
+```bash
+priorstates workspace export --name my-project        # → my-project.psworkspace
+priorstates workspace import ./my-project.psworkspace # on the other machine (or a URL)
+```
+
+Imported memory surfaces through the same MCP tools — no extra wiring. Imports are
+**checksum-verified, shown for confirmation before ingest, and tagged with their
+source** (and never auto-pinned).
+
+**New here?** Load a ready-made sample to see PriorStates populated instantly:
+
+```bash
+priorstates workspace import --demo
+```
+
 ## Docs
 
 - **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — the everyday-use manual. **Start here.**

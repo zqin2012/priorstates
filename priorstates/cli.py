@@ -190,6 +190,42 @@ def cmd_journal(args):
 
 
 # --------------------------------------------------------------------------- #
+# workspace share (export / import)
+# --------------------------------------------------------------------------- #
+def cmd_workspace(args):
+    from .core import share
+    cfg = load_config()
+    if args.action == "export":
+        out = share.export_workspace(cfg, scope=args.scope, out_path=args.out,
+                                     name=args.name, author=args.author)
+        print(f"exported → {out}")
+        print("Share that file; the recipient runs:  priorstates workspace import <file-or-url>")
+    elif args.action == "import":
+        src = share.packaged_demo() if args.demo else args.source
+        if not src:
+            print("give a .psworkspace file/URL, or --demo", file=sys.stderr); sys.exit(2)
+        manifest, _ = share.read_bundle(src)
+        print(share.summarize(manifest))
+        assume_yes = args.yes or args.demo  # the bundled demo is trusted
+        if not assume_yes:
+            if not sys.stdin.isatty():
+                print("refusing to import non-interactively without --yes "
+                      "(imported memory is used by your agents).", file=sys.stderr)
+                sys.exit(2)
+            if input("Import into your workspace? [y/N] ").strip().lower() not in ("y", "yes"):
+                print("cancelled."); return
+        res = share.import_workspace(cfg, src)
+        msg = f"imported '{res['name']}': +{res['memory_added']} memories"
+        if res["memory_renamed"]:
+            msg += f" ({res['memory_renamed']} renamed to avoid clashes)"
+        msg += f", +{res['journal_added']} journal entries"
+        if res["journal_needs_project"]:
+            msg += "  (journal skipped — run `priorstates init` in a project to import it)"
+        print(msg)
+        print("Your agents can recall the new memories now (restart the agent if it caches tools).")
+
+
+# --------------------------------------------------------------------------- #
 # mdlab / agents / cockpit / gui / mcp / doctor
 # --------------------------------------------------------------------------- #
 def cmd_mdlab(args):
@@ -709,6 +745,17 @@ def build_parser():
     a = pjs.add_parser("capture", help="add a journal entry from a free-text sentence")
     a.add_argument("text", nargs="?", help="plain-English note (or piped on stdin)")
     pj.set_defaults(func=cmd_journal)
+
+    pw = sub.add_parser("workspace", help="share a workspace (memory + journal)")
+    pws = pw.add_subparsers(dest="action", required=True)
+    we = pws.add_parser("export", help="bundle this workspace into a .psworkspace file")
+    we.add_argument("--scope", default="project", choices=["project", "global", "user", "all"])
+    we.add_argument("--out"); we.add_argument("--name"); we.add_argument("--author")
+    wi = pws.add_parser("import", help="import a .psworkspace file or URL (or --demo)")
+    wi.add_argument("source", nargs="?", help="path or http(s) URL to a .psworkspace")
+    wi.add_argument("--demo", action="store_true", help="import the bundled demo workspace")
+    wi.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    pw.set_defaults(func=cmd_workspace)
 
     pl = sub.add_parser("mdlab", help="run runnable-Markdown files")
     pls = pl.add_subparsers(dest="action", required=True)
