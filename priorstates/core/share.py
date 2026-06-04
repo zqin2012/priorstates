@@ -235,3 +235,63 @@ def import_workspace(config, src, *, verify: bool = True) -> dict:
 def packaged_demo() -> Path:
     """Path to the bundled demo workspace shipped with the package."""
     return Path(__file__).resolve().parents[1] / "data" / "demo.psworkspace"
+
+
+_demo_label_cache = None
+
+
+def demo_label() -> str:
+    """The provenance `source:` label that import_workspace stamps for the demo."""
+    global _demo_label_cache
+    if _demo_label_cache is None:
+        m, _ = read_bundle(packaged_demo())
+        _demo_label_cache = "%s by %s" % (m.get("name", "priorstates-demo"), m.get("author", "PriorStates"))
+    return _demo_label_cache
+
+
+def _memory_files(config):
+    dirs = []
+    if config.memory_project_dir and Path(config.memory_project_dir).exists():
+        dirs.append(Path(config.memory_project_dir))
+    if Path(config.memory_global_dir).exists():
+        dirs.append(Path(config.memory_global_dir))
+    for d in dirs:
+        for p in d.glob("*.md"):
+            if p.name not in _RESERVED:
+                yield p
+
+
+def _journal_files(config):
+    jd = config.journal_dir
+    if jd and (Path(jd) / "entries").exists():
+        yield from (Path(jd) / "entries").glob("*.md")
+
+
+def _source_of(p: Path) -> str | None:
+    try:
+        return _fm_get(_split_md(p.read_text(encoding="utf-8", errors="replace"))[0], "source")
+    except OSError:
+        return None
+
+
+def has_source(config, label: str) -> bool:
+    """True if any memory/journal item was imported with this provenance label."""
+    return any(_source_of(p) == label for p in _memory_files(config)) or \
+        any(_source_of(p) == label for p in _journal_files(config))
+
+
+def remove_source(config, label: str) -> dict:
+    """Delete every memory/journal item imported with `label`; reindex + regenerate."""
+    n = j = 0
+    for p in list(_memory_files(config)):
+        if _source_of(p) == label:
+            p.unlink(); n += 1
+    for p in list(_journal_files(config)):
+        if _source_of(p) == label:
+            p.unlink(); j += 1
+    from ..memory import api as mem
+    mem.reindex(config, "all"); mem.render_pinned(config)
+    if j and config.journal_dir:
+        from . import journal as J
+        J.regenerate_all(config)
+    return {"memory_removed": n, "journal_removed": j}

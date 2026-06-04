@@ -32,31 +32,6 @@ STARTER_PROMPT = (
     "PriorStates memory to confirm you can recall it, and tell me what you found."
 )
 
-# Clearly-labelled sample content so a fresh install isn't an empty screen.
-# Names/topics are prefixed so "Remove examples" can find and delete them.
-_EX_PREFIX = "example-"
-EXAMPLE_MEMORIES = [
-    dict(name="example-prefer-hypothesis-tuning", type_str="preference", pinned=True,
-         description="Tune from theory + data, not a grid search",
-         body="When tuning parameters, start from a hypothesis grounded in theory and "
-              "data rather than sweeping a blind grid.\n\n(Example memory — safe to delete.)"),
-    dict(name="example-project-uses-pytest", type_str="project", pinned=False,
-         description="This project's tests run under pytest",
-         body="Run the test suite with `pytest -q`.\n\n(Example memory — safe to delete.)"),
-    dict(name="example-logs-are-utc", type_str="note", pinned=False,
-         description="Service log timestamps are UTC",
-         body="All service logs are emitted in UTC.\n\n(Example memory — safe to delete.)"),
-]
-EXAMPLE_JOURNAL = [
-    dict(topic="example-onboarding", outcome="winner", title="PriorStates demo worked",
-         body="Installed PriorStates, wired the agent over MCP, and recalled a memory in a "
-              "fresh session.\n\n(Example journal entry — safe to delete.)"),
-    dict(topic="example-onboarding", outcome="loser", title="Blind grid search was too noisy",
-         body="A blind parameter grid produced noise-dominated winners; hypothesis-driven "
-              "tuning did better.\n\n(Example journal entry — safe to delete.)"),
-]
-
-
 class _Tip:
     """Minimal hover tooltip for a Tk widget (stdlib only)."""
 
@@ -1090,13 +1065,10 @@ class PriorStatesGUI:
 
     def _examples_present(self):
         try:
-            from ..memory import api as mem
-            for m in EXAMPLE_MEMORIES:
-                if mem.get_memory(self.cfg, m["name"]):
-                    return True
+            from ..core import share
+            return share.has_source(self.cfg, share.demo_label())
         except Exception:
-            pass
-        return False
+            return False
 
     def _first_available_agent(self):
         """An agent CLI that's present and (preferably) wired, for the live demo."""
@@ -1124,51 +1096,27 @@ class PriorStatesGUI:
         self.set_status(f"Starter prompt copied — paste it into {key.capitalize()} (just opened).")
 
     def load_examples(self):
-        from ..memory import api as mem
-        from ..core import journal as J
-        added = 0
-        for m in EXAMPLE_MEMORIES:
-            try:
-                mem.add_memory(self.cfg, name=m["name"], type_str=m["type_str"],
-                               description=m["description"], body=m["body"],
-                               pinned=m["pinned"], scope="project", overwrite=True)
-                added += 1
-            except Exception:
-                pass
-        jr = 0
-        if self.cfg.journal_dir:
-            for e in EXAMPLE_JOURNAL:
-                try:
-                    J.add(self.cfg, topic=e["topic"], outcome=e["outcome"],
-                          title=e["title"], body=e["body"])
-                    jr += 1
-                except Exception:
-                    pass
-        note = f"Loaded {added} example memories" + (f" + {jr} journal entries." if jr
-               else " (open a project folder to also seed journal examples).")
-        self.set_status(note)
+        # The "examples" are the bundled demo workspace — same path new users get
+        # from `priorstates workspace import --demo` (dogfoods the share feature).
+        from ..core import share
+        try:
+            res = share.import_workspace(self.cfg, share.packaged_demo())
+            note = "Loaded the demo workspace: +%d memories" % res["memory_added"]
+            note += (", +%d journal entries." % res["journal_added"]) if res["journal_added"] \
+                else " (open a project folder to also load the demo journal)."
+            self.set_status(note)
+        except Exception as e:
+            self.set_status(f"error: {e}")
         self.refresh_all()
 
     def remove_examples(self):
-        from ..memory import api as mem
-        from ..core import journal as J
-        for m in EXAMPLE_MEMORIES:
-            try:
-                mem.delete_memory(self.cfg, m["name"])
-            except Exception:
-                pass
-        # Delete example journal entries (topic-prefixed) if any.
-        if self.cfg.journal_dir:
-            try:
-                for e in J.all_entries(self.cfg):
-                    if str(getattr(e, "topic", "")).startswith(_EX_PREFIX):
-                        p = getattr(e, "path", None)
-                        if p and Path(p).exists():
-                            Path(p).unlink()
-                J.regenerate_all(self.cfg)
-            except Exception:
-                pass
-        self.set_status("Removed example data.")
+        from ..core import share
+        try:
+            r = share.remove_source(self.cfg, share.demo_label())
+            self.set_status("Removed demo data (%d memories, %d journal entries)."
+                            % (r["memory_removed"], r["journal_removed"]))
+        except Exception as e:
+            self.set_status(f"error: {e}")
         self.refresh_all()
 
 

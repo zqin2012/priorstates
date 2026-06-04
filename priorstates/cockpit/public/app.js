@@ -175,9 +175,24 @@ function renderLoc(loc) {
   if (loc.type === 'memory') return renderMemory(loc.name);
   if (loc.type === 'placeholder') return placeholder();
 }
+async function loadDemo(e) {
+  const b = e && e.currentTarget;
+  if (b) { b.disabled = true; b.textContent = 'loading…'; }
+  const r = await post('/api/workspace/import-demo', {});
+  if (r && r.error) { alert('Load failed: ' + r.error); if (b) { b.disabled = false; b.textContent = '🛰 Load the demo workspace'; } return; }
+  await reload();
+}
 function placeholder() {
   setActive(null);
   const c = $('#content'); c.innerHTML = '';
+  const m = state.meta || {};
+  // First run: empty + writable → offer the bundled demo workspace.
+  if (m.allow_write && !state.journal.length && !state.memory.length) {
+    const box = el('div', { class: 'placeholder' }, ['New here? Load a sample workspace to see PriorStates populated.']);
+    box.append(el('div', { class: 'ph-open' }, [el('button', { class: 'wsbtn', onclick: loadDemo }, '🛰 Load the demo workspace')]));
+    c.append(box);
+    return;
+  }
   const box = el('div', { class: 'placeholder' }, ['Pick a journal entry, memory, or doc on the left.']);
   const eds = editorsAvailable();
   if (eds && (state.meta || {}).project_root) {

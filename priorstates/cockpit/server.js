@@ -289,6 +289,16 @@ function apiCapture(res, kind, text) {
       : sendJson(res, { ok: true, result: String(stdout).trim() }));
 }
 
+// Import the bundled demo workspace (for the cockpit's first-run empty state).
+function apiImportDemo(res) {
+  if (!ALLOW_WRITE) return send(res, 403, JSON.stringify({ error: 'writes disabled — start the cockpit with --allow-write' }));
+  cp.execFile(PS_PYTHON, ['-m', 'priorstates', 'workspace', 'import', '--demo', '--yes'],
+    { cwd: PROJECT_ROOT || HOME, timeout: 120000, maxBuffer: 1 << 22 },
+    (err, stdout, stderr) => err
+      ? send(res, 500, JSON.stringify({ error: String(stderr || err.message).slice(0, 2000) }))
+      : sendJson(res, { ok: true, result: String(stdout).trim() }));
+}
+
 // Pin/unpin or delete a memory by name (argv, no shell).
 function apiMemOp(res, op, name, unpin) {
   if (!ALLOW_WRITE) return send(res, 403, JSON.stringify({ error: 'writes disabled — start the cockpit with --allow-write' }));
@@ -330,6 +340,7 @@ const server = http.createServer((req, res) => {
       if (p === '/api/journal/capture') return readBody(req, (b) => apiCapture(res, 'journal', b.text));
       if (p === '/api/memory/pin') return readBody(req, (b) => apiMemOp(res, 'pin', b.name, b.unpin));
       if (p === '/api/memory/delete') return readBody(req, (b) => apiMemOp(res, 'delete', b.name));
+      if (p === '/api/workspace/import-demo') return readBody(req, () => apiImportDemo(res));
       return send(res, 404, 'not found', 'text/plain');
     }
     if (p === '/') return serveStatic(res, 'index.html');
