@@ -333,6 +333,14 @@ class PriorStatesGUI:
         wired = None if self._ws_is_remote(w) else self._wired_agents()
         targets = self._launch_targets()
 
+        # Primary action — the daily driver — sits first and prominent (local
+        # workspaces; remote ones have a dedicated Open Cockpit in the panel).
+        if not self._ws_is_remote(w):
+            ck = ttk.Button(bar, text="🛰  Open Cockpit", style="Accent.TButton",
+                            command=self.open_cockpit)
+            ck.pack(side="left", padx=(2, 16), pady=3)
+            self._tip(ck, "Open the local web cockpit — browse and add memory, journal and docs.")
+
         def add_group(header, group):
             shown = [t for t in group if t[0] in present]
             if not shown:
@@ -913,12 +921,13 @@ class PriorStatesGUI:
         nb.add(f, text="Get started")
         self._tabs["dashboard"] = f
 
-        head = ttk.Frame(f); head.pack(fill="x", padx=16, pady=(16, 6))
-        tk.Label(head, text="Welcome to PriorStates", bg=BG, fg=FG,
-                 font=(self._fam(), 17, "bold")).pack(anchor="w")
-        tk.Label(head, text=("Your agents now share one local memory + research journal. "
-                             "Work through these steps to start using it — each has a button."),
-                 bg=BG, fg=DIM, wraplength=860, justify="left").pack(anchor="w", pady=(4, 0))
+        head = ttk.Frame(f); head.pack(fill="x", padx=16, pady=(12, 4))
+        tk.Label(head, text="Get started", bg=BG, fg=FG,
+                 font=(self._fam(), 13, "bold")).pack(anchor="w")
+        tk.Label(head, text=("First-time setup. Your everyday actions — Open Cockpit, launch an "
+                             "agent, open an editor — live in the toolbar above."),
+                 bg=BG, fg=DIM, wraplength=820, justify="left",
+                 font=(self._fam(), 9)).pack(anchor="w", pady=(2, 0))
 
         # Checklist (rebuilt by _render_dashboard on every refresh).
         self._dash_check = ttk.Frame(f); self._dash_check.pack(fill="x", padx=16, pady=8)
@@ -1006,19 +1015,19 @@ class PriorStatesGUI:
         for c in box.winfo_children():
             c.destroy()
         for it in self._dashboard_items():
-            row = ttk.Frame(box); row.pack(fill="x", pady=5)
+            row = ttk.Frame(box); row.pack(fill="x", pady=3)
             if it["kind"] == "check":
                 mark, color = ("✓", GREEN) if it.get("done") else ("→", ACCENT_HOVER)
             else:
                 mark, color = ("•", DIM)
-            tk.Label(row, text=mark, bg=BG, fg=color, font=(self._fam(), 14, "bold"),
+            tk.Label(row, text=mark, bg=BG, fg=color, font=(self._fam(), 11),
                      width=2).pack(side="left", anchor="n")
             txt = ttk.Frame(row); txt.pack(side="left", fill="x", expand=True)
             tk.Label(txt, text=it["title"], bg=BG, fg=FG,
-                     font=(self._fam(), 11, "bold")).pack(anchor="w")
+                     font=(self._fam(), 10)).pack(anchor="w")
             if it.get("hint"):
                 tk.Label(txt, text=it["hint"], bg=BG, fg=DIM, wraplength=620,
-                         justify="left").pack(anchor="w")
+                         justify="left", font=(self._fam(), 9)).pack(anchor="w")
             fn = it.get("fn")
             btn = ttk.Button(row, text=it["btn"], command=(fn or (lambda: None)),
                              style="Accent.TButton" if (it["kind"] == "check" and not it.get("done")) else "Agent.TButton")
