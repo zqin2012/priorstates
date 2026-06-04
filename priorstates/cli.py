@@ -155,6 +155,10 @@ def cmd_memory(args):
         _print(mem.delete_memory(cfg, args.name, scope=args.scope))
     elif args.action == "reindex":
         _print(mem.reindex(cfg, args.scope, verbose=True))
+    elif args.action == "capture":
+        from .core.capture import capture_memory
+        text = args.text or sys.stdin.read()
+        _print(capture_memory(cfg, text))
 
 
 # --------------------------------------------------------------------------- #
@@ -179,6 +183,10 @@ def cmd_journal(args):
     elif args.action == "regen":
         J.regenerate_all(cfg)
         print("regenerated INDEX.md, by_topic/, digests/")
+    elif args.action == "capture":
+        from .core.capture import capture_journal
+        text = args.text or sys.stdin.read()
+        _print(capture_journal(cfg, text))
 
 
 # --------------------------------------------------------------------------- #
@@ -684,6 +692,8 @@ def build_parser():
     a.add_argument("--scope", default="all")
     a = pms.add_parser("delete"); a.add_argument("name"); a.add_argument("--scope", default="all")
     a = pms.add_parser("reindex"); a.add_argument("--scope", default="all")
+    a = pms.add_parser("capture", help="add a memory from a free-text sentence")
+    a.add_argument("text", nargs="?", help="plain-English memory (or piped on stdin)")
     pm.set_defaults(func=cmd_memory)
 
     pj = sub.add_parser("journal", help="manage the research journal")
@@ -696,6 +706,8 @@ def build_parser():
     a.add_argument("--tag"); a.add_argument("--since"); a.add_argument("--until")
     a.add_argument("--query"); a.add_argument("-k", type=int, default=20)
     pjs.add_parser("regen")
+    a = pjs.add_parser("capture", help="add a journal entry from a free-text sentence")
+    a.add_argument("text", nargs="?", help="plain-English note (or piped on stdin)")
     pj.set_defaults(func=cmd_journal)
 
     pl = sub.add_parser("mdlab", help="run runnable-Markdown files")

@@ -1,10 +1,12 @@
 """PriorStates desktop control panel.
 
-A stdlib-only (Tkinter) GUI to manage everything without the terminal: see
-status, manage memory + journal, wire/unwire agents, run mdlab files, and launch
-the cockpit. Slow operations (reindex, model download, cockpit) run off the UI
-thread. The Tk root is created only in :func:`main`, so importing this module is
-safe on headless machines.
+A stdlib-only (Tkinter) GUI that acts as the **launcher / control plane** — the
+things that need a native app: manage workspaces (local + remote SSH), launch
+agents (CLI) and editors/IDEs in a workspace, wire/unwire agents over MCP, and
+open the web cockpit. Browsing and editing *content* (memory, journal, docs,
+mdlab) lives in the cockpit, which is the better medium for it. Slow operations
+(model download, cockpit) run off the UI thread. The Tk root is created only in
+:func:`main`, so importing this module is safe on headless machines.
 """
 from __future__ import annotations
 
@@ -53,66 +55,6 @@ EXAMPLE_JOURNAL = [
          body="A blind parameter grid produced noise-dominated winners; hypothesis-driven "
               "tuning did better.\n\n(Example journal entry — safe to delete.)"),
 ]
-
-
-def _slugify(s, maxwords=6, maxlen=48):
-    words = re.findall(r"[A-Za-z0-9]+", (s or "").lower())
-    slug = "-".join(words[:maxwords])[:maxlen].strip("-")
-    return slug or "note"
-
-
-def parse_memory_text(text, valid_types):
-    """Free text → {name, type_str, description, body, pinned} via local rules.
-
-    Pure + deterministic (no model, no network) so it's unit-testable headless.
-    `#pin` (or the word 'important') pins; the type is guessed from cue words and
-    constrained to `valid_types`; the name is slugged from the first sentence;
-    the full original text is kept as the body.
-    """
-    raw = (text or "").strip()
-    low = raw.lower()
-    pinned = bool(re.search(r"(^|\s)#pin\b", low) or re.search(r"\bimportant\b", low))
-    cleaned = re.sub(r"(^|\s)#\w[\w-]*", " ", raw).strip()        # drop hashtags from the title text
-    first = re.split(r"(?<=[.!?])\s|\n", cleaned or raw, maxsplit=1)[0].strip()
-    description = first[:120]
-    typ = "note"
-    if "preference" in valid_types and re.search(r"\b(i prefer|prefer|i like|always|never|favou?rite|rather)\b", low):
-        typ = "preference"
-    elif "project" in valid_types and re.search(r"\b(this (project|repo|repository|codebase)|we use|our team|the project)\b", low):
-        typ = "project"
-    elif "reference" in valid_types and re.search(r"https?://", low):
-        typ = "reference"
-    elif "user" in valid_types and re.search(r"\b(i am|i'm|my name|my role|call me|i work)\b", low):
-        typ = "user"
-    return dict(name=_slugify(description), type_str=typ, description=description,
-                body=raw, pinned=pinned)
-
-
-def parse_journal_text(text, outcomes):
-    """Free text → {topic, outcome, title, body} via local rules (pure, testable).
-
-    Outcome is the first `outcomes` word found, else a synonym match, else the
-    first outcome. Topic comes from a `#tag` or `topic:` prefix, else a short
-    slug. Title is the first sentence; body is the full text.
-    """
-    raw = (text or "").strip()
-    low = raw.lower()
-    outcome = next((o for o in outcomes if re.search(r"\b" + re.escape(o.lower()) + r"\b", low)), None)
-    if outcome is None:
-        syn = [("winner", r"\b(won|worked|works|success|improved|beat|win)\b"),
-               ("loser", r"\b(failed|fail|didn'?t work|lost|worse|regress|no edge)\b"),
-               ("bug", r"\b(bug|broken|crash|error|wrong)\b"),
-               ("decision", r"\b(decided|decision|chose|choose|going with)\b")]
-        outcome = next((o for o, pat in syn if o in outcomes and re.search(pat, low)), None)
-    if outcome is None:
-        outcome = outcomes[0] if outcomes else "note"
-    m = re.search(r"#(\w[\w-]*)", raw)
-    mt = re.match(r"\s*topic\s*[:=]\s*([^\s,;]+)", raw, re.I)
-    topic = (m.group(1) if m else (mt.group(1) if mt else _slugify(raw, maxwords=3, maxlen=24)))
-    title_src = re.sub(r"#\w[\w-]*", "", raw).strip()
-    title_src = re.sub(r"^\s*topic\s*[:=]\s*[^\s,;]+\s*", "", title_src, flags=re.I).strip()
-    title = (re.split(r"(?<=[.!?])\s|\n", title_src, maxsplit=1)[0].strip()[:120]) or "note"
-    return dict(topic=topic, outcome=outcome, title=title, body=raw)
 
 
 class _Tip:
@@ -228,10 +170,7 @@ class PriorStatesGUI:
         self._nb = ttk.Notebook(mainf)
         self._tabs = {}
         self._tab_dashboard(self._nb)
-        self._tab_memory(self._nb)
-        self._tab_journal(self._nb)
         self._tab_agents(self._nb)
-        self._tab_mdlab(self._nb)
         self._build_remote_panel(mainf)
 
         bar = ttk.Frame(root, style="Header.TFrame")
@@ -1029,18 +968,15 @@ class PriorStatesGUI:
                  btn=("Open Agents" if wired else "Wire agents"),
                  fn=(lambda: self.goto_tab("agents")) if wired else self.agents_install),
             dict(kind="check", done=memn > 0,
-                 title="Add your first memory",
-                 hint=(f"{memn} memor%s stored." % ("y" if memn == 1 else "ies")
-                       if memn else "A memory is a fact agents recall across sessions."),
-                 btn="Add a memory", fn=lambda: self.goto_tab("memory", focus=True)),
+                 title="Add & browse memory + journal",
+                 hint=(("%d memor%s so far — view and add more in the cockpit."
+                        % (memn, "y" if memn == 1 else "ies")) if memn
+                       else "Open the cockpit to add and search memory + journal (or just tell your agent)."),
+                 btn="Open cockpit", fn=self.open_cockpit),
             dict(kind="do",
                  title="Try it live with an agent",
-                 hint="Copies a starter prompt and opens an agent so you can watch it remember.",
+                 hint="Copies a starter prompt and opens an agent so you can watch it remember and record.",
                  btn="Try with agent", fn=self.try_with_agent),
-            dict(kind="do",
-                 title="Open the cockpit",
-                 hint="A local web view that maps your memory, journal and docs.",
-                 btn="Open cockpit", fn=self.open_cockpit),
             dict(kind="check", done=semantic,
                  title="Upgrade to semantic recall (optional)",
                  hint=("Semantic embedding model active." if semantic
@@ -1107,9 +1043,7 @@ class PriorStatesGUI:
         self.dash_text.insert("1.0", "\n".join(lines))
         self.dash_text.config(state="disabled")
         self._render_dashboard()
-        if hasattr(self, "_refresh_mem"):
-            self._refresh_mem()
-            self._refresh_journal()
+        if hasattr(self, "_refresh_agents"):
             self._refresh_agents()
 
     # ----- onboarding helpers ------------------------------------------ #
@@ -1123,9 +1057,6 @@ class PriorStatesGUI:
         frame = self._tabs.get(name)
         if frame is not None:
             self._nb.select(frame)
-        if focus and name == "memory" and getattr(self, "mem_capture", None) is not None:
-            self.mem_capture.focus_set()
-            self.set_status("Type a memory in plain English, then click Save.")
 
     def open_docs(self):
         webbrowser.open("https://priorstates.com")
@@ -1225,269 +1156,6 @@ class PriorStatesGUI:
         self.set_status("Removed example data.")
         self.refresh_all()
 
-    # ----- memory ------------------------------------------------------ #
-    def _tab_memory(self, nb):
-        tk, ttk = self.tk, self.ttk
-        f = ttk.Frame(nb)
-        nb.add(f, text="Memory")
-        self._tabs["memory"] = f
-        top = ttk.Frame(f)
-        top.pack(fill="x", padx=10, pady=8)
-        self.mem_query = tk.StringVar()
-        ttk.Entry(top, textvariable=self.mem_query, width=40).pack(side="left")
-        ttk.Button(top, text="Search", command=self.mem_search).pack(side="left", padx=6)
-        ttk.Button(top, text="List pinned", command=self._refresh_mem).pack(side="left")
-        holder = ttk.Frame(f); holder.pack(fill="both", expand=True, padx=10)
-        self.mem_list = tk.Listbox(holder, height=12)
-        self.mem_empty = tk.Label(
-            holder, bg=BG, fg=DIM, justify="left", anchor="nw", wraplength=720,
-            text=("No memories yet.\n\nA memory is a fact your agents recall by meaning across "
-                  "sessions — a preference, a project detail, a decision. Add one below, click "
-                  "“Load examples” on the Get-started tab, or just ask an agent to remember "
-                  "something."))
-        self.mem_list.pack(fill="both", expand=True)
-        self.mem_list.bind("<<ListboxSelect>>", self._mem_selected)
-
-        form = ttk.LabelFrame(f, text="Add memory")
-        form.pack(fill="x", padx=10, pady=8)
-        # --- free-text capture (primary) ---
-        ttk.Label(form, text="Jot a memory in plain English  (add  #pin  to pin it):").pack(
-            anchor="w", padx=6, pady=(6, 2))
-        self.mem_capture = tk.Text(form, height=3, wrap="word")
-        self.mem_capture.pack(fill="x", padx=6)
-        cap = ttk.Frame(form); cap.pack(fill="x", padx=6, pady=6)
-        ttk.Button(cap, text="Save", command=self.mem_quick_add, style="Accent.TButton").pack(side="left")
-        self._mem_details_btn = ttk.Button(cap, text="▸ details", style="Ws.TButton",
-                                            command=self._toggle_mem_details)
-        self._mem_details_btn.pack(side="left", padx=6)
-        ttk.Button(cap, text="Pin/Unpin selected", command=self.mem_toggle_pin).pack(side="left", padx=6)
-        ttk.Button(cap, text="Delete selected", command=self.mem_delete).pack(side="left")
-        tk.Label(form, text="Tip: or just tell your agent — it writes memories for you as you work.",
-                 bg=BG, fg=DIM).pack(anchor="w", padx=6, pady=(0, 6))
-        # --- structured fields (advanced; hidden until "details") ---
-        self.mem_name = tk.StringVar()
-        self.mem_type = tk.StringVar(value="note")
-        self.mem_desc = tk.StringVar()
-        self.mem_pin = tk.BooleanVar()
-        self._mem_details = ttk.Frame(form)        # packed by _toggle_mem_details
-        r = ttk.Frame(self._mem_details); r.pack(fill="x", pady=2)
-        ttk.Label(r, text="name").pack(side="left")
-        self._mem_name_entry = ttk.Entry(r, textvariable=self.mem_name, width=24)
-        self._mem_name_entry.pack(side="left", padx=4)
-        ttk.Label(r, text="type").pack(side="left")
-        self.mem_type_cb = ttk.Combobox(r, textvariable=self.mem_type, values=self.cfg.memory_types, width=12)
-        self.mem_type_cb.pack(side="left", padx=4)
-        ttk.Checkbutton(r, text="pin", variable=self.mem_pin).pack(side="left")
-        r2 = ttk.Frame(self._mem_details); r2.pack(fill="x", pady=2)
-        ttk.Label(r2, text="desc").pack(side="left")
-        ttk.Entry(r2, textvariable=self.mem_desc, width=60).pack(side="left", padx=4)
-        self.mem_body = tk.Text(self._mem_details, height=3)
-        self.mem_body.pack(fill="x", padx=4, pady=2)
-        ttk.Button(self._mem_details, text="Add (structured)", command=self.mem_add,
-                   style="Accent.TButton").pack(anchor="w", pady=(0, 4))
-        self._mem_rows = []
-
-    def _toggle_mem_details(self):
-        if self._mem_details.winfo_ismapped():
-            self._mem_details.pack_forget()
-            self._mem_details_btn.config(text="▸ details")
-        else:
-            self._mem_details.pack(fill="x", padx=6, pady=(0, 4))
-            self._mem_details_btn.config(text="▾ details")
-
-    def mem_quick_add(self):
-        from ..memory import api as mem
-        text = self.mem_capture.get("1.0", "end").strip()
-        if not text:
-            return self.set_status("Type a memory first.")
-        d = parse_memory_text(text, list(self.cfg.memory_types))
-        name, base, i = d["name"], d["name"], 2
-        while mem.get_memory(self.cfg, name):       # keep names unique
-            name = f"{base}-{i}"; i += 1
-        try:
-            mem.add_memory(self.cfg, name=name, type_str=d["type_str"], description=d["description"],
-                           body=d["body"], pinned=d["pinned"], scope="project")
-            self.set_status("saved '%s'  (type=%s%s)" % (name, d["type_str"],
-                            ", pinned" if d["pinned"] else ""))
-            self.mem_capture.delete("1.0", "end")
-            self._refresh_mem()
-        except Exception as e:
-            self.set_status(f"error: {e}")
-
-    def _refresh_mem(self):
-        from ..memory import api as mem
-        self._mem_rows = mem.list_pinned(self.cfg) or []
-        self._fill_mem(self._mem_rows, "📌 ")
-
-    def mem_search(self):
-        from ..memory import api as mem
-        q = self.mem_query.get().strip()
-        if not q:
-            return self._refresh_mem()
-        self._mem_rows = mem.search_memory(self.cfg, q, k=20)
-        self._fill_mem(self._mem_rows, "")
-
-    def _fill_mem(self, rows, prefix):
-        self.mem_list.delete(0, "end")
-        if not rows:
-            self.mem_list.pack_forget()
-            self.mem_empty.pack(fill="both", expand=True, pady=24)
-            return
-        self.mem_empty.pack_forget()
-        if not self.mem_list.winfo_ismapped():
-            self.mem_list.pack(fill="both", expand=True)
-        for r in rows:
-            tag = "📌 " if r.get("pinned") else prefix
-            self.mem_list.insert("end", f"{tag}{r['name']}  [{r.get('type','')}]  {r.get('description','')}")
-
-    def _mem_selected(self, _):
-        pass
-
-    def _selected_mem_name(self):
-        sel = self.mem_list.curselection()
-        if not sel or sel[0] >= len(self._mem_rows):
-            return None
-        return self._mem_rows[sel[0]]["name"]
-
-    def mem_add(self):
-        from ..memory import api as mem
-        name = self.mem_name.get().strip()
-        body = self.mem_body.get("1.0", "end").strip()
-        if not name or not body:
-            return self.set_status("name and body required")
-        try:
-            mem.add_memory(self.cfg, name=name, type_str=self.mem_type.get(),
-                           description=self.mem_desc.get(), body=body,
-                           pinned=self.mem_pin.get(), scope="project")
-            self.set_status(f"added memory '{name}'")
-            self.mem_name.set(""); self.mem_desc.set(""); self.mem_body.delete("1.0", "end")
-            self._refresh_mem()
-        except Exception as e:
-            self.set_status(f"error: {e}")
-
-    def mem_toggle_pin(self):
-        from ..memory import api as mem
-        name = self._selected_mem_name()
-        if not name:
-            return
-        cur = mem.get_memory(self.cfg, name)
-        mem.pin_memory(self.cfg, name, pinned=not (cur and cur.get("pinned")))
-        self.set_status(f"toggled pin on '{name}'")
-        self._refresh_mem()
-
-    def mem_delete(self):
-        from ..memory import api as mem
-        name = self._selected_mem_name()
-        if not name:
-            return
-        mem.delete_memory(self.cfg, name)
-        self.set_status(f"deleted '{name}'")
-        self._refresh_mem()
-
-    # ----- journal ----------------------------------------------------- #
-    def _tab_journal(self, nb):
-        tk, ttk = self.tk, self.ttk
-        f = ttk.Frame(nb)
-        nb.add(f, text="Journal")
-        self._tabs["journal"] = f
-        top = ttk.Frame(f); top.pack(fill="x", padx=10, pady=8)
-        self.jr_query = tk.StringVar()
-        ttk.Entry(top, textvariable=self.jr_query, width=40).pack(side="left")
-        ttk.Button(top, text="Search", command=self._refresh_journal).pack(side="left", padx=6)
-        jholder = ttk.Frame(f); jholder.pack(fill="both", expand=True, padx=10)
-        self.jr_list = tk.Listbox(jholder, height=14)
-        self.jr_empty = tk.Label(
-            jholder, bg=BG, fg=DIM, justify="left", anchor="nw", wraplength=720,
-            text=("No journal entries yet.\n\nThe journal records what you tried and how it "
-                  "turned out — winner, loser, bug, decision — so experiments aren't silently "
-                  "re-run. Record one below, or click “Load examples” on the Get-started tab.\n\n"
-                  "(The journal lives in a project folder — add one from the left sidebar if you "
-                  "don't see it.)"))
-        self.jr_list.pack(fill="both", expand=True)
-
-        form = ttk.LabelFrame(f, text="Add entry")
-        form.pack(fill="x", padx=10, pady=8)
-        # --- free-text capture (primary) ---
-        ttk.Label(form, text=("Describe what happened in plain English  "
-                              "(e.g. “grid search was too noisy — loser #tuning”):")).pack(
-            anchor="w", padx=6, pady=(6, 2))
-        self.jr_capture = tk.Text(form, height=3, wrap="word")
-        self.jr_capture.pack(fill="x", padx=6)
-        cap = ttk.Frame(form); cap.pack(fill="x", padx=6, pady=6)
-        ttk.Button(cap, text="Record", command=self.jr_quick_add, style="Accent.TButton").pack(side="left")
-        self._jr_details_btn = ttk.Button(cap, text="▸ details", style="Ws.TButton",
-                                           command=self._toggle_jr_details)
-        self._jr_details_btn.pack(side="left", padx=6)
-        tk.Label(form, text="Tip: or let your agent log winners and losers as it works.",
-                 bg=BG, fg=DIM).pack(anchor="w", padx=6, pady=(0, 6))
-        # --- structured fields (advanced; hidden until "details") ---
-        self.jr_topic = tk.StringVar(); self.jr_outcome = tk.StringVar(value="winner"); self.jr_title = tk.StringVar()
-        self._jr_details = ttk.Frame(form)
-        r = ttk.Frame(self._jr_details); r.pack(fill="x", pady=2)
-        ttk.Label(r, text="topic").pack(side="left")
-        ttk.Entry(r, textvariable=self.jr_topic, width=20).pack(side="left", padx=4)
-        ttk.Label(r, text="outcome").pack(side="left")
-        self.jr_outcome_cb = ttk.Combobox(r, textvariable=self.jr_outcome, values=self.cfg.outcomes, width=14)
-        self.jr_outcome_cb.pack(side="left", padx=4)
-        r2 = ttk.Frame(self._jr_details); r2.pack(fill="x", pady=2)
-        ttk.Label(r2, text="title").pack(side="left")
-        ttk.Entry(r2, textvariable=self.jr_title, width=64).pack(side="left", padx=4)
-        self.jr_body = tk.Text(self._jr_details, height=3); self.jr_body.pack(fill="x", padx=4, pady=2)
-        ttk.Button(self._jr_details, text="Record (structured)", command=self.jr_add,
-                   style="Accent.TButton").pack(anchor="w", pady=(0, 4))
-
-    def _toggle_jr_details(self):
-        if self._jr_details.winfo_ismapped():
-            self._jr_details.pack_forget()
-            self._jr_details_btn.config(text="▸ details")
-        else:
-            self._jr_details.pack(fill="x", padx=6, pady=(0, 4))
-            self._jr_details_btn.config(text="▾ details")
-
-    def jr_quick_add(self):
-        from ..core import journal as J
-        text = self.jr_capture.get("1.0", "end").strip()
-        if not text:
-            return self.set_status("Describe what happened first.")
-        if not self.cfg.journal_dir:
-            return self.set_status("Journal needs a project — add a project folder from the left sidebar.")
-        d = parse_journal_text(text, list(self.cfg.outcomes))
-        try:
-            e = J.add(self.cfg, topic=d["topic"], outcome=d["outcome"], title=d["title"], body=d["body"])
-            self.set_status("recorded %s  (%s · %s)" % (e.id, d["outcome"], d["topic"]))
-            self.jr_capture.delete("1.0", "end")
-            self._refresh_journal()
-        except Exception as ex:
-            self.set_status(f"error: {ex}")
-
-    def _refresh_journal(self):
-        from ..core import journal as J
-        q = self.jr_query.get().strip() or None
-        rows = J.search(self.cfg, query=q, k=200) if self.cfg.journal_dir else []
-        self.jr_list.delete(0, "end")
-        if not rows:
-            self.jr_list.pack_forget()
-            self.jr_empty.pack(fill="both", expand=True, pady=24)
-            return
-        self.jr_empty.pack_forget()
-        if not self.jr_list.winfo_ismapped():
-            self.jr_list.pack(fill="both", expand=True)
-        for r in rows:
-            self.jr_list.insert("end", f"{r['date']} [{r['outcome']}] {r['topic']}: {r['title']}")
-
-    def jr_add(self):
-        from ..core import journal as J
-        topic = self.jr_topic.get().strip(); title = self.jr_title.get().strip()
-        body = self.jr_body.get("1.0", "end").strip()
-        if not topic or not title or not body:
-            return self.set_status("topic, title, body required")
-        try:
-            e = J.add(self.cfg, topic=topic, outcome=self.jr_outcome.get(), title=title, body=body)
-            self.set_status(f"recorded {e.id}")
-            self.jr_title.set(""); self.jr_body.delete("1.0", "end")
-            self._refresh_journal()
-        except Exception as e:
-            self.set_status(f"error: {e}")
 
     # ----- agents ------------------------------------------------------ #
     def _tab_agents(self, nb):
@@ -1527,42 +1195,6 @@ class PriorStatesGUI:
         from ..agents.install import uninstall
         self.run_bg(lambda: uninstall(self.cfg), lambda r: (self.set_status("agents unwired"), self._refresh_agents()))
 
-    # ----- mdlab ------------------------------------------------------- #
-    def _tab_mdlab(self, nb):
-        tk, ttk = self.tk, self.ttk
-        f = ttk.Frame(nb)
-        nb.add(f, text="mdlab")
-        self._tabs["mdlab"] = f
-        top = ttk.Frame(f); top.pack(fill="x", padx=10, pady=8)
-        self.mdlab_path = tk.StringVar()
-        ttk.Entry(top, textvariable=self.mdlab_path, width=60).pack(side="left")
-        ttk.Button(top, text="Browse", command=self._mdlab_browse).pack(side="left", padx=6)
-        rb = ttk.Button(top, text="Run", command=self._mdlab_run, style="Accent.TButton"); rb.pack(side="left")
-        self._tip(rb, "Run a runnable-Markdown (.md) file: execute its python/bash/journal\n"
-                      "blocks and splice the results back into the document.")
-        self.mdlab_out = tk.Text(f, height=18, wrap="word")
-        self.mdlab_out.pack(fill="both", expand=True, padx=10, pady=8)
-
-    def _mdlab_browse(self):
-        from tkinter import filedialog
-        p = filedialog.askopenfilename(filetypes=[("Markdown", "*.md"), ("All", "*.*")])
-        if p:
-            self.mdlab_path.set(p)
-
-    def _mdlab_run(self):
-        from ..mdlab import run_file
-        p = self.mdlab_path.get().strip()
-        if not p:
-            return
-        self.set_status("running mdlab…")
-
-        def go():
-            return run_file(p, _load(self._ws_local_path(self.workspace)))
-        def done(r):
-            self.mdlab_out.insert("end", f"\n{r}\n")
-            self.mdlab_out.insert("end", Path(p).read_text())
-            self.set_status(f"ran {r['ran']} blocks ({r['errors']} errors)")
-        self.run_bg(go, done)
 
     # ----- cockpit / model -------------------------------------------- #
     def open_cockpit(self):
@@ -1610,6 +1242,7 @@ class PriorStatesGUI:
         env["PS_PORT"] = str(port)
         env["PS_HOST"] = "127.0.0.1"
         env["PS_PYTHON"] = sys.executable
+        env["PS_ALLOW_WRITE"] = "1"   # GUI is the trusted local control plane → enable cockpit capture
         if want_open:
             env["PS_ALLOW_OPEN"] = "1"
         try:

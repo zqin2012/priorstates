@@ -252,6 +252,43 @@ function apiMdlabRun(res, target) {
     });
 }
 
+// Read a JSON request body (small, capped) for POST writes.
+function readBody(req, cb) {
+  let b = '';
+  req.on('data', (d) => { b += d; if (b.length > 1e6) req.destroy(); });
+  req.on('end', () => { let j = {}; try { j = JSON.parse(b || '{}'); } catch (_) {} cb(j); });
+}
+
+// Free-text capture → add a memory / journal entry via the Python CLI on this
+// host (so the local heuristic parsers are reused, no logic duplicated in JS).
+// Opt-in via --allow-write. `text` is passed as an argv element (no shell), so
+// there is no injection surface.
+function apiCapture(res, kind, text) {
+  if (!ALLOW_WRITE) return send(res, 403, JSON.stringify({ error: 'writes disabled — start the cockpit with --allow-write' }));
+  text = (text || '').trim();
+  if (!text) return send(res, 400, JSON.stringify({ error: 'empty' }));
+  if (kind === 'journal' && !JOURNAL_DIR) return send(res, 400, JSON.stringify({ error: 'no project journal — open the cockpit from your project dir' }));
+  cp.execFile(PS_PYTHON, ['-m', 'priorstates', kind, 'capture', text],
+    { cwd: PROJECT_ROOT || HOME, timeout: 60000, maxBuffer: 1 << 22 },
+    (err, stdout, stderr) => err
+      ? send(res, 500, JSON.stringify({ error: String(stderr || err.message).slice(0, 2000) }))
+      : sendJson(res, { ok: true, result: String(stdout).trim() }));
+}
+
+// Pin/unpin or delete a memory by name (argv, no shell).
+function apiMemOp(res, op, name, unpin) {
+  if (!ALLOW_WRITE) return send(res, 403, JSON.stringify({ error: 'writes disabled — start the cockpit with --allow-write' }));
+  name = (name || '').trim();
+  if (!name) return send(res, 400, JSON.stringify({ error: 'no name' }));
+  const args = op === 'delete' ? ['memory', 'delete', name]
+    : ['memory', 'pin', name, ...(unpin ? ['--unpin'] : [])];
+  cp.execFile(PS_PYTHON, ['-m', 'priorstates', ...args],
+    { cwd: PROJECT_ROOT || HOME, timeout: 60000 },
+    (err, stdout, stderr) => err
+      ? send(res, 500, JSON.stringify({ error: String(stderr || err.message).slice(0, 2000) }))
+      : sendJson(res, { ok: true }));
+}
+
 // Launch a path in a local editor (opt-in). Validates the editor against the
 // detected allowlist and confines the path to the workspace roots; spawns the
 // CLI directly (no shell) so there's no injection surface.
@@ -274,6 +311,13 @@ function apiOpen(res, app, target) {
 const server = http.createServer((req, res) => {
   const u = url.parse(req.url, true); const p = u.pathname;
   try {
+    if (req.method === 'POST') {
+      if (p === '/api/memory/capture') return readBody(req, (b) => apiCapture(res, 'memory', b.text));
+      if (p === '/api/journal/capture') return readBody(req, (b) => apiCapture(res, 'journal', b.text));
+      if (p === '/api/memory/pin') return readBody(req, (b) => apiMemOp(res, 'pin', b.name, b.unpin));
+      if (p === '/api/memory/delete') return readBody(req, (b) => apiMemOp(res, 'delete', b.name));
+      return send(res, 404, 'not found', 'text/plain');
+    }
     if (p === '/') return serveStatic(res, 'index.html');
     if (p === '/api/meta') return sendJson(res, { home: HOME, project_root: PROJECT_ROOT,
       has_journal: !!JOURNAL_DIR, allow_open: ALLOW_OPEN, allow_write: ALLOW_WRITE,

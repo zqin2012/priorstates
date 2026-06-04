@@ -14,6 +14,50 @@ const el = (tag, props, kids) => {
   return e;
 };
 const api = (p) => fetch(p).then((r) => r.json());
+const post = (p, body) => fetch(p, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body || {}) }).then((r) => r.json());
+
+// Re-fetch all data and re-render (used after a capture and by the refresh button).
+async function reload() {
+  const [journal, memory, docs] = await Promise.all([api('/api/journal'), api('/api/memory'), api('/api/docs')]);
+  state.journal = journal; state.memory = memory; state.docs = docs;
+  $('#cnt-journal').textContent = `(${journal.length})`;
+  $('#cnt-memory').textContent = `(${memory.length})`;
+  $('#cnt-docs').textContent = `(${docs.count})`;
+  renderWorkspaceOpen();
+  render();
+}
+
+// Free-text quick-capture box (memory / journal). Only when the cockpit allows
+// writes; the server reuses the local Python parsers via `… capture`.
+function captureBox(kind) {
+  const m = state.meta || {};
+  if (!m.allow_write) return null;
+  if (kind === 'journal' && !m.has_journal) {
+    return el('div', { class: 'capture', style: 'padding:8px;border-bottom:1px solid #21262d;color:#8b949e;font-size:12px' },
+      'Journal needs a project — open the cockpit from your project folder.');
+  }
+  const ph = kind === 'journal'
+    ? 'Describe what happened… e.g. “grid search too noisy — loser #tuning”'
+    : 'Jot a memory in plain English… add #pin to pin it';
+  const inp = el('textarea', { rows: '2', placeholder: ph,
+    style: 'width:100%;box-sizing:border-box;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:6px;font:inherit;resize:vertical' });
+  const save = async () => {
+    const text = inp.value.trim(); if (!text) return;
+    btn.disabled = true; const was = btn.textContent; btn.textContent = 'saving…';
+    const r = await post('/api/' + kind + '/capture', { text });
+    btn.disabled = false; btn.textContent = was;
+    if (r && r.error) { alert('Save failed: ' + r.error); return; }
+    inp.value = ''; await reload();
+  };
+  // Cmd/Ctrl+Enter submits.
+  inp.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save(); });
+  const btn = el('button', { class: 'wsbtn', style: 'margin-top:4px', onclick: save },
+    kind === 'journal' ? 'Record' : 'Save');
+  const tip = el('div', { style: 'color:#6e7681;font-size:11px;margin-top:3px' },
+    'or just tell your agent — ⌘/Ctrl+Enter to save');
+  return el('div', { class: 'capture', style: 'padding:8px 8px 10px;border-bottom:1px solid #21262d' }, [inp, btn, tip]);
+}
 const OUT = { winner: '#3fb950', loser: '#f85149', bug: '#db6d28', gotcha: '#d29922', decision: '#d2a8ff', inconclusive: '#58a6ff', note: '#8b949e' };
 const sym = (o) => ({ winner: '✓', loser: '✗', bug: '🐞', gotcha: '⚠', decision: '💡', inconclusive: 'ℹ', note: '•' }[o] || '•');
 
@@ -190,6 +234,7 @@ function docLeaf(d) {
 }
 function renderJournal(q) {
   const tree = $('#tree'); tree.innerHTML = '';
+  const cb = captureBox('journal'); if (cb) tree.append(cb);
   let es = state.journal;
   if (q) es = es.filter((e) => (e.title + e.topic + e.tldr + e.outcome).toLowerCase().includes(q));
   const keyer = state.groupBy === 'outcome' ? (e) => e.outcome : state.groupBy === 'date' ? (e) => e.date.slice(0, 7) : (e) => e.topic;
@@ -209,6 +254,7 @@ function entryLeaf(e) {
 }
 function renderMemoryList(q) {
   const tree = $('#tree'); tree.innerHTML = '';
+  const cb = captureBox('memory'); if (cb) tree.append(cb);
   let ms = state.memory;
   if (q) ms = ms.filter((m) => (m.name + m.description + m.type).toLowerCase().includes(q));
   const groups = {};
