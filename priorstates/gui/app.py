@@ -923,7 +923,7 @@ class PriorStatesGUI:
         # Checklist (rebuilt by _render_dashboard on every refresh).
         self._dash_check = ttk.Frame(f); self._dash_check.pack(fill="x", padx=16, pady=8)
 
-        self.allow_open = tk.BooleanVar(value=False)   # cockpit --allow-open toggle (lives in System status)
+        self.allow_open = tk.BooleanVar(value=True)    # open-in-editor on by default (toggle in System status)
 
         # Footer: status toggle on the left, subtle Docs/Refresh links on the right.
         footer = ttk.Frame(f); footer.pack(fill="x", padx=16, pady=(12, 6))
