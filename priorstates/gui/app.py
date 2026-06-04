@@ -921,6 +921,9 @@ class PriorStatesGUI:
         db = ttk.Button(footer, text="Docs", style="Ws.TButton", command=self.open_docs)
         db.pack(side="right", padx=6)
         self._tip(db, "Open the PriorStates documentation in your browser.")
+        ub = ttk.Button(footer, text="⭯ Update", style="Ws.TButton", command=self.update_software)
+        ub.pack(side="right", padx=6)
+        self._tip(ub, "Reinstall the latest PriorStates from GitHub (restart the app afterward).")
 
         # Collapsible "System status & options" (advanced; hidden by default).
         self._status_box = ttk.Frame(f)
@@ -1016,7 +1019,13 @@ class PriorStatesGUI:
         self.cfg = _load(self._ws_local_path(self.workspace))
         emb = get_embedder(self.cfg)
         self._emb_backend = getattr(emb, "backend", "?")
+        try:
+            from importlib.metadata import version as _ver
+            _v = _ver("priorstates")
+        except Exception:
+            _v = "?"
         lines = [
+            f"version:      {_v}",
             f"home:         {self.cfg.home}",
             f"project root: {self.cfg.project_root or '(none — run init in a project)'}",
             f"journal:      {self.cfg.journal_dir or '(none)'}",
@@ -1229,6 +1238,39 @@ class PriorStatesGUI:
         from ..cli import _download_model
         self.set_status("downloading model… (see console)")
         self.run_bg(_download_model, lambda r: (self.set_status("model step done"), self.refresh_all()))
+
+    # Reinstall the latest PriorStates from GitHub (the pip-from-git path).
+    REPO_URL = "git+https://github.com/zqin2012/priorstates.git"
+
+    def update_software(self):
+        from tkinter import messagebox
+        if not messagebox.askyesno("Update PriorStates",
+                                    "Reinstall the latest PriorStates from GitHub?\n\n"
+                                    "You'll need to restart the app afterward to use the new version."):
+            return
+        in_venv = sys.prefix != sys.base_prefix          # pip --user is invalid inside a venv/pipx
+        cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", "--upgrade", "--force-reinstall"]
+        if not in_venv:
+            cmd.append("--user")
+        cmd.append("priorstates @ " + self.REPO_URL)
+        self.set_status("Updating PriorStates from GitHub… (see console)")
+
+        def go():
+            return subprocess.run(cmd, capture_output=True, text=True)
+
+        def done(p):
+            print(p.stdout or "", p.stderr or "")
+            if getattr(p, "returncode", 1) == 0:
+                self.set_status("Updated ✓  — restart PriorStates to use the new version.")
+                try:
+                    messagebox.showinfo("Update complete",
+                                        "PriorStates was updated. Close and reopen the app to use the new version.")
+                except Exception:
+                    pass
+            else:
+                tail = (p.stderr or p.stdout or "").strip().splitlines()
+                self.set_status("update failed: " + (tail[-1] if tail else "see console"))
+        self.run_bg(go, done)
 
     def on_close(self):
         # stop every per-workspace cockpit
