@@ -73,6 +73,11 @@ if [ "$WIRE" = 1 ]; then
   $PM agents install || true
 fi
 
+# Desktop/app-menu launcher for the GUI (Linux: writes a .desktop + a Desktop
+# icon; macOS/Windows: prints where the native installer creates the shortcut).
+echo "==> creating GUI launcher"
+$PM install-launcher --desktop || true
+
 # PATH hint for the bare `priorstates` command.
 SCRIPTDIR="$("$PY" -c 'import sysconfig,os; print(sysconfig.get_path("scripts", f"{os.name}_user"))' 2>/dev/null || true)"
 echo

@@ -52,7 +52,7 @@ cd priorstates
 # Optional "the works" (semantic model + all extras):
 #   ./install.sh --extras --model --wire
 ```
-Method B with `--wire` **already does Step 2** — skip straight to **Step 3**.
+Method B with `--wire` **already does Steps 2 and 4** — skip to **Step 3**.
 
 ## Step 2 — initialize and wire the user's agents
 
@@ -71,16 +71,36 @@ Expect config, backend, and agent status to report OK. If you see
 `priorstates: command not found`, that's only a PATH issue — keep using
 `python3 -m priorstates …` and the install is still fine.
 
-## Step 4 — report back to the human
+## Step 4 — create the desktop launcher (so the user can click to open the GUI)
+
+```bash
+python3 -m priorstates install-launcher --desktop
+```
+- **Linux:** this creates a **PriorStates icon on the Desktop** *and* an entry in
+  the application menu. The command prints the exact paths it wrote.
+- **macOS / Windows:** the clickable app icon is created by the native installer
+  (the `.pkg` / `brew install` → *PriorStates.app*, or the `Setup.exe` /
+  `install.ps1`). If the user installed via pip (Method A), there is no icon —
+  they launch with `python3 -m priorstates gui` (Windows: `py -m priorstates gui`).
+  Running the command above on these platforms just prints this guidance; that's
+  expected, not an error.
+
+## Step 5 — report back to the human
 
 Tell them, concisely:
 1. PriorStates is installed and `doctor` passed (paste the key lines).
 2. MCP is wired for their agents — **they must restart their agent**
    (Claude / Codex / Gemini) so it loads the new MCP server.
-3. Next things they can run:
+3. **How to open the GUI:**
+   - **Linux:** *"Double-click the **PriorStates** icon on your Desktop (or find
+     PriorStates in your application menu) to start the GUI."* If it doesn't
+     appear right away, they may need to log out/in once.
+   - **macOS/Windows (native installer):** *"Open **PriorStates** from
+     Launchpad / the Start menu."*
+   - **pip install, no icon:** *"Start it with `priorstates gui`."*
+4. They can also open the web cockpit any time:
    ```bash
    python3 -m priorstates cockpit    # → http://127.0.0.1:7700
-   python3 -m priorstates gui
    ```
 
 ## Notes
