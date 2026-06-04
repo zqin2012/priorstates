@@ -32,6 +32,17 @@ proposing the next step, and **records** durable conclusions back — closing an
 **interactive** loop for everyday work and an **autonomous** loop for unattended
 research runs.
 
+## Install (let your agent do it)
+
+Already using Claude, Codex, or Gemini? Tell it one sentence:
+
+> Install PriorStates: fetch https://priorstates.com/install.md and follow it.
+
+The agent reads [`AGENT_INSTALL.md`](AGENT_INSTALL.md) (mirrored at
+`priorstates.com/install.md`), installs the package, wires itself over MCP, and
+verifies with `priorstates doctor`. Then restart your agent to load the new
+tools. Prefer to do it yourself? See [docs/QUICKSTART.md](docs/QUICKSTART.md).
+
 ## Status
 
 **v0.1 — working implementation.** The core is built and tested end-to-end
