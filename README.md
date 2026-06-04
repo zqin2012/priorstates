@@ -59,6 +59,15 @@ All of it is wired into your agents over the open **[MCP](https://modelcontextpr
 protocol by `priorstates agents install` — so they *recall* before acting and
 *record* durable conclusions back, automatically.
 
+## MCP server
+
+`priorstates agents install` registers the server into Claude / Codex / Gemini for
+you; to run it directly over stdio: **`priorstates mcp`**. It exposes 10 tools:
+
+- **memory** — `memory_add` · `memory_search` · `memory_get` · `memory_list_pinned` · `memory_pin` · `memory_delete`
+- **journal** — `journal_add` · `journal_search` · `journal_regen`
+- **mdlab** — `mdlab_run`
+
 ## See it in action
 
 The **cockpit** maps your whole research surface; the **CLI** captures and recalls from your terminal.
