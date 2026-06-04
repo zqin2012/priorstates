@@ -242,6 +242,8 @@ def cmd_workspace(args):
                                      headers={"Content-Type": "application/octet-stream"})
         if key:
             req.add_header("X-PriorStates-Key", key)
+        if getattr(args, "list", False):
+            req.add_header("X-Listed", "1")
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 res = json.loads(r.read().decode("utf-8"))
@@ -259,6 +261,8 @@ def cmd_workspace(args):
         pubf.write_text(json.dumps(reg, indent=2))
         print(f"published → {res['url']}")
         print(f"install:    priorstates workspace install {res['url']}")
+        if res.get("listed"):
+            print("listed in the hub directory → https://priorstates.com/browse.html")
         print(f"(edit token saved to {pubf} — keep it to delete the bundle later)")
 
 
@@ -798,6 +802,7 @@ def build_parser():
     wpub = pws.add_parser("publish", help="export + upload to the hub; prints a shareable link")
     wpub.add_argument("--scope", default="project", choices=["project", "global", "user", "all"])
     wpub.add_argument("--name"); wpub.add_argument("--author")
+    wpub.add_argument("--list", action="store_true", help="list it in the public hub directory (default: unlisted private link)")
     wpub.add_argument("--hub", help="hub base URL (default $PRIORSTATES_HUB or https://priorstates.com/w)")
     pw.set_defaults(func=cmd_workspace)
 
