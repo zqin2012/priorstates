@@ -37,7 +37,9 @@ class MemoryStore:
         # support mmap (some network filesystems). The .psmem is small, so this is
         # cheap and harmless.
         try:
-            self._mm = mmap.mmap(self._f.fileno(), 0, prot=mmap.PROT_READ)
+            # access=ACCESS_READ is portable (Windows + POSIX); the prot= form is
+            # POSIX-only and raises AttributeError on Windows (no mmap.PROT_READ).
+            self._mm = mmap.mmap(self._f.fileno(), 0, access=mmap.ACCESS_READ)
             self._is_mmap = True
         except (OSError, ValueError):
             self._mm = self._f.read()

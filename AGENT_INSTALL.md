@@ -39,11 +39,13 @@ $exe = "$env:TEMP\PriorStates-Windows-Setup.exe"
 Invoke-WebRequest -UseBasicParsing https://github.com/zqin2012/priorstates/releases/latest/download/PriorStates-Windows-Setup.exe -OutFile $exe
 Start-Process -Wait $exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
 ```
-This auto-installs Python 3.12 if none is found, installs PriorStates, runs
-`init`, and creates Start Menu + Desktop shortcuts. It does **not** wire the
-agents, so continue to **Step 2**. On Windows you can **skip Step 4** -- the
-shortcuts already exist. (If the human already has Python 3.10+ and prefers pip,
-use the Linux/macOS commands below with `py` instead of `python3`.)
+In silent mode this does **everything**: auto-installs Python 3.12 if none is
+found, installs PriorStates, runs `init`, installs MCP support, **wires the
+agents** (Claude / Codex / Gemini), and creates Start Menu + Desktop shortcuts --
+i.e. it does Steps 2 and 4 for you. **Skip to Step 3 to verify**, then restart
+the agent. (If `doctor` shows an agent `registered=False`, run Step 2's `agents
+install`. If the human already has Python 3.10+ and prefers pip, use the
+Linux/macOS commands below with `py` instead of `python3`.)
 
 **Linux / macOS -- install straight from the repo (no clone):**
 ```bash

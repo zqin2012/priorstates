@@ -41,6 +41,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &Desktop shortcut"; GroupDescription: "Additional shortcuts:"
+Name: "wireagents"; Description: "&Connect PriorStates to my AI agents (Claude / Codex / Gemini) over MCP"; GroupDescription: "Agent setup:"
 
 [Files]
 Source: "..\..\build\windows\{#Wheel}"; DestDir: "{app}"; Flags: ignoreversion
@@ -58,6 +59,12 @@ Filename: "{code:GetPy}"; Parameters: "{code:PipInstallArgs}"; \
   StatusMsg: "Installing PriorStates into your Python..."; Flags: runhidden waituntilterminated
 Filename: "{code:GetPy}"; Parameters: "{code:InitArgs}"; \
   StatusMsg: "Initializing PriorStates..."; Flags: runhidden waituntilterminated
+; Optional: install the MCP runtime + register it into any Claude / Codex / Gemini
+; so wired agents actually get the PriorStates tools.
+Filename: "{code:GetPy}"; Parameters: "{code:McpInstallArgs}"; \
+  StatusMsg: "Installing MCP support..."; Flags: runhidden waituntilterminated; Tasks: wireagents
+Filename: "{code:GetPy}"; Parameters: "{code:AgentsArgs}"; \
+  StatusMsg: "Connecting your AI agents over MCP..."; Flags: runhidden waituntilterminated; Tasks: wireagents
 Filename: "{sys}\wscript.exe"; Parameters: """{app}\PriorStates.vbs"""; \
   Description: "Launch PriorStates now"; Flags: postinstall nowait skipifsilent
 
@@ -134,6 +141,16 @@ end;
 function InitArgs(Param: String): String;
 begin
   Result := PyPrefix + '-m priorstates init';
+end;
+
+function McpInstallArgs(Param: String): String;
+begin
+  Result := PyPrefix + '-m pip install --user mcp';
+end;
+
+function AgentsArgs(Param: String): String;
+begin
+  Result := PyPrefix + '-m priorstates agents install';
 end;
 
 function UninstallArgs(Param: String): String;
