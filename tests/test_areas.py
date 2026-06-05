@@ -1,4 +1,4 @@
-"""Named workspaces (areas): per-area global memory, shared model/identity."""
+"""Named areas: per-area global memory, shared model/identity."""
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -22,11 +22,11 @@ def test_area_redirects_global_memory_but_shares_model(tmp_path):
     research = replace(root, area="research")
 
     assert root.memory_global_dir == tmp_path / "home" / "memory"
-    assert strat.memory_global_dir == tmp_path / "home" / "workspaces" / "strategy" / "memory"
-    assert research.memory_global_dir == tmp_path / "home" / "workspaces" / "research" / "memory"
+    assert strat.memory_global_dir == tmp_path / "home" / "areas" / "strategy" / "memory"
+    assert research.memory_global_dir == tmp_path / "home" / "areas" / "research" / "memory"
     # model cache + bin location stay shared on the root home
     assert strat.models_dir == root.models_dir == tmp_path / "home" / "models"
-    assert strat.memory_global_bin == tmp_path / "home" / "workspaces" / "strategy" / "memory.psmem"
+    assert strat.memory_global_bin == tmp_path / "home" / "areas" / "strategy" / "memory.psmem"
 
 
 def test_areas_are_isolated(tmp_path):
@@ -55,7 +55,7 @@ def test_safe_area_sanitizes(monkeypatch):
     assert cfgmod.safe_area("../etc") == "etc"
     assert cfgmod.safe_area("") is None
     assert cfgmod.safe_area(None) is None
-    monkeypatch.setenv("PRIORSTATES_WORKSPACE", "Strategy")
+    monkeypatch.setenv("PRIORSTATES_AREA", "Strategy")
     assert cfgmod.current_area() == "strategy"
 
 
