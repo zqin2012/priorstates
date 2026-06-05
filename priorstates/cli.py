@@ -418,9 +418,15 @@ def _start_local_opener(host: str) -> int:
                 path = (q.get("path") or [""])[0]
                 b = BINS.get(app)
                 if b and path and shutil.which(b):
+                    argv = [b, "--reuse-window", "--remote", f"ssh-remote+{host}", path]
+                    kw = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+                    if os.name == "nt":
+                        # code/cursor/antigravity are .cmd shims CreateProcess can't
+                        # launch directly — run through cmd, like the desktop GUI.
+                        argv = ["cmd", "/c"] + argv
+                        kw["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
                     try:
-                        subprocess.Popen([b, "--reuse-window", "--remote",
-                                          f"ssh-remote+{host}", path])
+                        subprocess.Popen(argv, **kw)
                         ok = True
                     except Exception:
                         ok = False
