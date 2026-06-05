@@ -177,7 +177,15 @@ class PriorStatesGUI:
 
         bar = ttk.Frame(root, style="Header.TFrame")
         bar.pack(fill="x", side="bottom")
-        ttk.Label(bar, textvariable=self.status, style="Status.TLabel", anchor="w").pack(fill="x")
+        # App-level actions: always visible, not tied to a workspace or tab.
+        ub = ttk.Button(bar, text="Update", style="Foot.TButton", command=self.update_software)
+        ub.pack(side="right", padx=(0, 12), pady=3)
+        self._tip(ub, "Reinstall the latest PriorStates from GitHub (restart the app afterward).")
+        db = ttk.Button(bar, text="Docs", style="Foot.TButton", command=self.open_docs)
+        db.pack(side="right", padx=4, pady=3)
+        self._tip(db, "Open the PriorStates documentation in your browser.")
+        ttk.Label(bar, textvariable=self.status, style="Status.TLabel", anchor="w").pack(
+            side="left", fill="x", expand=True)
 
         self._rebuild_sidebar()
         self._show_for_workspace()
@@ -965,18 +973,13 @@ class PriorStatesGUI:
 
         self.allow_open = tk.BooleanVar(value=True)    # open-in-editor on by default (toggle in System status)
 
-        # Footer: status toggle on the left, centered Update/Docs links on the right.
+        # Footer: just the System status & options toggle. Update/Docs moved to
+        # the app-level status bar at the bottom of the window.
         footer = ttk.Frame(f); footer.pack(fill="x", padx=16, pady=(12, 6))
         self._status_open = tk.BooleanVar(value=False)
         self._status_toggle = ttk.Button(footer, text="▸ System status & options",
                                           style="Ws.TButton", command=self._toggle_status)
         self._status_toggle.pack(side="left")
-        db = ttk.Button(footer, text="Docs", style="Foot.TButton", command=self.open_docs)
-        db.pack(side="right", padx=6)
-        self._tip(db, "Open the PriorStates documentation in your browser.")
-        ub = ttk.Button(footer, text="Update", style="Foot.TButton", command=self.update_software)
-        ub.pack(side="right", padx=6)
-        self._tip(ub, "Reinstall the latest PriorStates from GitHub (restart the app afterward).")
 
         # Collapsible "System status & options" (advanced; hidden by default).
         self._status_box = ttk.Frame(f)
