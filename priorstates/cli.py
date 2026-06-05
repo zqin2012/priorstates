@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 
 from .core.config import (
-    DEFAULT_CONFIG_TOML, PROJECT_MARKER, ensure_user_bin_on_path, home_dir, load_config,
+    DEFAULT_CONFIG_TOML, PROJECT_MARKER, ensure_editors_on_path,
+    ensure_user_bin_on_path, home_dir, load_config,
 )
 
 
@@ -1007,6 +1008,7 @@ def main(argv=None):
         except Exception:
             pass
     ensure_user_bin_on_path()    # so launched agents / subprocesses find ~/.local/bin CLIs
+    ensure_editors_on_path()     # so editors (Antigravity, Cursor, …) not on PATH are found
     args = build_parser().parse_args(argv)
     args.func(args)
 

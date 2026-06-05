@@ -114,8 +114,9 @@ class PriorStatesGUI:
         # Native CLI installers (Claude Code, etc.) drop binaries in ~/.local/bin,
         # not on PATH by default on Windows — make this process (and its launches)
         # find them so detection/launch works without manual PATH surgery.
-        from ..core.config import ensure_user_bin_on_path
+        from ..core.config import ensure_editors_on_path, ensure_user_bin_on_path
         ensure_user_bin_on_path()
+        ensure_editors_on_path()     # find editors (Antigravity, Cursor, …) not on PATH
         # Under pythonw there's no console: sys.stdout/err may be None, and a direct
         # print of a non-ASCII char (-> ... checkmarks) would crash on a cp1252
         # default. Make the std streams safe so background tasks never blow up.

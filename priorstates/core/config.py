@@ -159,6 +159,34 @@ def ensure_user_bin_on_path() -> None:
             os.environ["PATH"] = extra + os.pathsep + cur
 
 
+def ensure_editors_on_path() -> None:
+    """VSCode-family editors (Antigravity, Cursor, Windsurf, VS Code) install under
+    %LOCALAPPDATA%\\Programs (or Program Files) but don't always add their launcher
+    dir to PATH, so shutil.which() misses them and the GUI/cockpit can't detect or
+    launch them. Prepend the known dirs that exist. Windows-only (no-op elsewhere)."""
+    if os.name != "nt":
+        return
+    cands: list[Path] = []
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        progs = Path(local) / "Programs"
+        cands += [progs / "antigravity", progs / "antigravity" / "bin",
+                  progs / "Microsoft VS Code" / "bin",
+                  progs / "Microsoft VS Code Insiders" / "bin",
+                  progs / "cursor", progs / "cursor" / "resources" / "app" / "bin",
+                  progs / "Windsurf", progs / "Windsurf" / "bin"]
+    for pf in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        if pf:
+            cands += [Path(pf) / "Microsoft VS Code" / "bin",
+                      Path(pf) / "Antigravity", Path(pf) / "Antigravity" / "bin"]
+    parts = os.environ.get("PATH", "").split(os.pathsep)
+    for d in cands:
+        ds = str(d)
+        if ds not in parts and d.is_dir():
+            os.environ["PATH"] = ds + os.pathsep + os.environ.get("PATH", "")
+            parts.insert(0, ds)
+
+
 def find_project_root(start: Path | str | None = None) -> Path | None:
     """Nearest ancestor of ``start`` (default cwd) that contains a ``.priorstates/``
     project dir. The global store (``$PRIORSTATES_HOME``, usually ``~/.priorstates``)
