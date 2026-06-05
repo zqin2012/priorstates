@@ -427,6 +427,25 @@ class PriorStatesGUI:
             self.set_status(f"launch failed: {e}")
             return False
 
+    def _remote_abspath(self, w, host, proj):
+        """Resolve a (possibly ~-based) remote path to an absolute one via ssh,
+        cached on the workspace. VSCode/antigravity --remote need an absolute path."""
+        cached = w.get("_proj_abs")
+        if cached:
+            return cached
+        try:
+            out = subprocess.run(
+                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host,
+                 _remote_cd(proj) + " >/dev/null 2>&1 && pwd"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=12)
+            p = ((out.stdout or "").strip().splitlines()[-1:] or [""])[0]
+            if p.startswith("/"):
+                w["_proj_abs"] = p
+                return p
+        except Exception:
+            pass
+        return proj
+
     def _launch_gui(self, w, binname, label):
         """Open an editor/IDE on the workspace folder. Remote uses VSCode-style
         `--remote ssh-remote+host <path>` (the client runs locally)."""
@@ -437,8 +456,12 @@ class PriorStatesGUI:
             if not shutil.which(binname):
                 self.set_status(f"{label}: opening a remote folder needs the '{binname}' CLI on PATH")
                 return
-            argv = [binname, "--remote", "ssh-remote+" + host] + ([proj] if proj else [])
             where = host + ((":" + proj) if proj else "")
+            # VSCode/antigravity --remote don't tilde-expand: resolve a ~ path to
+            # an absolute remote path first (cached on the workspace).
+            if proj and not proj.startswith("/"):
+                proj = self._remote_abspath(w, host, proj)
+            argv = [binname, "--remote", "ssh-remote+" + host] + ([proj] if proj else [])
         else:
             path = w["path"]
             if shutil.which(binname):

@@ -520,6 +520,27 @@ def cmd_connect(args):
     # remote file in YOUR editor via `code --remote …`. PS_SSH_HOST/PS_OPENER_PORT
     # are passed through to the cockpit so the browser knows where to call.
     opener_port = _start_local_opener(host)
+    # A ~-based remote project must be resolved to an ABSOLUTE path on the remote:
+    # VSCode/antigravity --remote don't tilde-expand, and the nested shell quoting
+    # around a literal ~ is fragile. Resolve it via the (already-authenticated) SSH
+    # master so the cockpit AND the editor-open get a real path.
+    if args.project and not args.project.startswith("/"):
+        # tilde-aware `cd` (a quoted ~ wouldn't expand): cd ~/<quoted-rest>
+        if args.project == "~":
+            cd = "cd ~"
+        elif args.project.startswith("~/"):
+            cd = "cd ~/" + shlex.quote(args.project[2:])
+        else:
+            cd = "cd " + shlex.quote(args.project)
+        try:
+            rp = subprocess.run(
+                SSH + [host, cd + " >/dev/null 2>&1 && pwd"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
+            abspath = ((rp.stdout or "").strip().splitlines()[-1:] or [""])[0]
+            if abspath.startswith("/"):
+                args.project = abspath
+        except Exception:
+            pass
     proj = f" --project {shlex.quote(args.project)}" if args.project else ""
     term = " --terminal" if getattr(args, "terminal", False) else ""
     remote_cmd = (f"sh -lc 'PATH=$HOME/.local/bin:$PATH PS_SSH_HOST={host} "
