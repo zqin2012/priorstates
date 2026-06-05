@@ -16,6 +16,7 @@ Config is read from ``~/.priorstates/config.toml`` and overlaid with
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -83,6 +84,11 @@ def _parse_toml_value(v: str):
 class Config:
     home: Path
     project_root: Path | None = None
+    # A named workspace ("area") — e.g. core-dev / strategy / ops / audit.
+    # When set, the *global* memory store lives under home/workspaces/<area>/,
+    # so each area has its own dense, scoped pack. The model cache and signing
+    # identity stay shared on the root home (no per-area re-download).
+    area: str | None = None
     model: str = DEFAULT_MODEL
     embed_dtype: str = "float16"
     use_daemon: bool = True
@@ -105,12 +111,17 @@ class Config:
         return self.models_dir / self.model
 
     @property
+    def _area_root(self) -> Path:
+        """Where the global memory store lives — the named area, or the root home."""
+        return (self.home / "workspaces" / self.area) if self.area else self.home
+
+    @property
     def memory_global_dir(self) -> Path:
-        return self.home / "memory"
+        return self._area_root / "memory"
 
     @property
     def memory_global_bin(self) -> Path:
-        return self.home / "memory.psmem"
+        return self._area_root / "memory.psmem"
 
     @property
     def project_dir(self) -> Path | None:
@@ -145,6 +156,30 @@ class Config:
 
 def home_dir() -> Path:
     return Path(os.environ.get("PRIORSTATES_HOME") or (Path.home() / ".priorstates")).expanduser()
+
+
+_AREA_RE = re.compile(r"[^a-z0-9_-]+")
+
+
+def safe_area(name: str | None) -> str | None:
+    """Sanitize a workspace/area name to a safe path segment (or None)."""
+    if not name:
+        return None
+    s = _AREA_RE.sub("-", name.strip().lower()).strip("-")
+    return s or None
+
+
+def current_area() -> str | None:
+    """The active named workspace, from $PRIORSTATES_WORKSPACE (or None = root)."""
+    return safe_area(os.environ.get("PRIORSTATES_WORKSPACE"))
+
+
+def list_areas(home: Path) -> list[str]:
+    """Named workspaces that exist under home/workspaces/ (those with a memory dir)."""
+    base = Path(home) / "workspaces"
+    if not base.is_dir():
+        return []
+    return sorted(d.name for d in base.iterdir() if (d / "memory").is_dir())
 
 
 def ensure_user_bin_on_path() -> None:
@@ -246,7 +281,7 @@ def load_config(start: Path | str | None = None,
             project_root = Path(force_project).expanduser()
     else:
         project_root = find_project_root(start)
-    cfg = Config(home=home, project_root=project_root)
+    cfg = Config(home=home, project_root=project_root, area=current_area())
     cfg = _apply(cfg, _load_toml(home / "config.toml"))
     if project_root and (project_root / PROJECT_MARKER / "config.toml").exists():
         cfg = _apply(cfg, _load_toml(project_root / PROJECT_MARKER / "config.toml"))

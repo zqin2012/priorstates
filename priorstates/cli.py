@@ -346,6 +346,28 @@ def cmd_workspace(args):
         print(f"unpublished {cid} from {hub}")
 
 
+def cmd_workspaces(args):
+    """List named workspaces (areas) and show which one is active."""
+    from .core import config as _cfg
+    home = _cfg.home_dir()
+    active = _cfg.current_area()
+    SKIP = {"MEMORY.md", "INDEX.md", "README.md"}
+
+    def _count(area):
+        d = (home / "workspaces" / area / "memory") if area else (home / "memory")
+        return len([p for p in d.glob("*.md") if p.name not in SKIP]) if d.is_dir() else 0
+
+    print(f"home: {home}")
+    print(f"active workspace: {active or '(default / root store)'}\n")
+    print("workspaces:")
+    for area, label in [(None, "(default)")] + [(a, a) for a in _cfg.list_areas(home)]:
+        mark = "*" if area == active else " "
+        print(f" {mark} {label:<20} {_count(area):>4} memories")
+    if not _cfg.list_areas(home):
+        print("\n(create one by running any command with --workspace NAME, e.g.\n"
+              "   priorstates --workspace strategy memory add \"…\")")
+
+
 def cmd_identity(args):
     from .core import identity
     cfg = load_config()
@@ -982,6 +1004,8 @@ def cmd_install_launcher(args):
 # --------------------------------------------------------------------------- #
 def build_parser():
     p = argparse.ArgumentParser("priorstates", description="PriorStates — shared memory & research journal for your AI agents (memory + journal + cockpit + mdlab).")
+    p.add_argument("--workspace", "-W", metavar="NAME",
+                   help="use the named workspace/area (core-dev, strategy, ops, …) instead of the default store")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("init", help="initialize global + project scopes")
@@ -1062,6 +1086,9 @@ def build_parser():
     wun.add_argument("--hub", help="hub base URL (default $PRIORSTATES_HUB or https://priorstates.com/w)")
     pw.set_defaults(func=cmd_workspace)
 
+    pws2 = sub.add_parser("workspaces", help="list named workspaces (areas) and the active one")
+    pws2.set_defaults(func=cmd_workspaces)
+
     pid = sub.add_parser("identity", help="manage your publisher signing identity")
     pids = pid.add_subparsers(dest="action", required=False)
     pids.add_parser("show", help="show this machine's publisher identity (default)")
@@ -1139,6 +1166,9 @@ def main(argv=None):
     ensure_user_bin_on_path()    # so launched agents / subprocesses find ~/.local/bin CLIs
     ensure_editors_on_path()     # so editors (Antigravity, Cursor, …) not on PATH are found
     args = build_parser().parse_args(argv)
+    # --workspace selects a named area for every load_config() in this process.
+    if getattr(args, "workspace", None):
+        os.environ["PRIORSTATES_WORKSPACE"] = args.workspace
     args.func(args)
 
 
