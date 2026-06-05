@@ -83,9 +83,13 @@ The **cockpit** maps your whole research surface; the **CLI** captures and recal
 
 ## Agent-neutral
 
-One memory store and one journal, surfaced to **Claude · Codex · Gemini · Antigravity**
-through MCP and a pinned context block — no lock-in, no rewrites. Switch agents
-without losing a thing.
+One memory store and one journal, surfaced to **Claude Code · Claude Desktop · Codex ·
+Gemini · Antigravity** through MCP and a pinned context block — no lock-in, no
+rewrites. Switch agents without losing a thing. The **VS Code / JetBrains
+extensions** for Claude Code and Codex share their CLI's MCP config, so they're
+covered automatically; **Claude Desktop** (its own app) is wired into
+`claude_desktop_config.json` too. Every client on the machine reads the *same*
+local store, so a memory saved in one is instantly recalled in all the others.
 
 ## Private by default
 
