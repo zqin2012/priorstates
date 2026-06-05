@@ -1,7 +1,7 @@
-"""Share a workspace (memory + journal) as a portable `.psworkspace` bundle.
+"""Share a pack (memory + journal) as a portable `.pspack` bundle.
 
-Phase 0 of the "share workspace" experiment: export the markdown that makes up a
-workspace into a single tar.gz, and import someone else's bundle into your local
+Phase 0 of the "share pack" experiment: export the markdown that makes up a
+pack into a single tar.gz, and import someone else's bundle into your local
 store. The `.psmem` indexes are derived, so a bundle is just text files + a
 manifest; importing writes the files and reindexes, after which the memories
 surface through the existing MCP tools — no new agent wiring.
@@ -20,7 +20,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-FORMAT = "psworkspace/1"
+FORMAT = "pack/1"
 _RESERVED = {"MEMORY.md", "INDEX.md", "README.md"}
 
 
@@ -77,11 +77,11 @@ def _fm_tags(text: str) -> set[str]:
     return set(parse_tags(_fm_get(_split_md(text)[0], "tags")))
 
 
-def export_workspace(config, *, scope: str = "project", out_path=None,
+def export_pack(config, *, scope: str = "project", out_path=None,
                      name: str | None = None, author: str | None = None,
                      tags: list[str] | None = None,
                      types: list[str] | None = None, sign: bool = False) -> Path:
-    """Bundle a workspace's memory + journal into a `.psworkspace`.
+    """Bundle a pack's memory + journal into a `.pspack`.
 
     `tags` / `types` are an optional **selection filter** — the promotion gate.
     When `tags` is given, only memory/journal items carrying at least one of
@@ -137,7 +137,7 @@ def export_workspace(config, *, scope: str = "project", out_path=None,
             members[arc] = raw
             journal.append({"file": arc, "id": p.stem, "sha256": _sha(raw)})
 
-    ws_name = name or (Path(config.project_root).name if config.project_root else "workspace")
+    ws_name = name or (Path(config.project_root).name if config.project_root else "pack")
     manifest = {
         "format": FORMAT, "name": ws_name, "author": author or "anonymous",
         "created_utc": _now(), "priorstates_version": _pkg_version(),
@@ -155,7 +155,7 @@ def export_workspace(config, *, scope: str = "project", out_path=None,
             raise RuntimeError("cannot sign: install the `sign` extra "
                                "(pip install 'priorstates[sign]') for ed25519 support")
         manifest["signature"] = sig
-    out = Path(out_path) if out_path else Path.cwd() / (ws_name.replace("/", "-") + ".psworkspace")
+    out = Path(out_path) if out_path else Path.cwd() / (ws_name.replace("/", "-") + ".pspack")
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         _add(tar, "manifest.json", json.dumps(manifest, indent=2).encode("utf-8"))
@@ -208,12 +208,12 @@ def read_bundle(src) -> tuple[dict, dict]:
             else:
                 members[m.name] = b
     if manifest.get("format") != FORMAT:
-        raise ValueError("not a recognized .psworkspace bundle")
+        raise ValueError("not a recognized .pspack bundle")
     return manifest, members
 
 
 def summarize(manifest: dict) -> str:
-    s = ("workspace '%s' by %s — %d memor%s, %d journal entr%s (created %s)"
+    s = ("pack '%s' by %s — %d memor%s, %d journal entr%s (created %s)"
          % (manifest.get("name", "?"), manifest.get("author", "anonymous"),
             len(manifest.get("memory", [])), "y" if len(manifest.get("memory", [])) == 1 else "ies",
             len(manifest.get("journal", [])), "y" if len(manifest.get("journal", [])) == 1 else "ies",
@@ -238,7 +238,7 @@ def summarize(manifest: dict) -> str:
     return s
 
 
-def import_workspace(config, src, *, verify: bool = True) -> dict:
+def import_pack(config, src, *, verify: bool = True) -> dict:
     """Write a bundle's memory + journal into the local store and reindex.
 
     Caller is responsible for any confirmation; this just performs the import.
@@ -305,14 +305,14 @@ def import_workspace(config, src, *, verify: bool = True) -> dict:
 
 def packaged_demo() -> Path:
     """Path to the bundled demo workspace shipped with the package."""
-    return Path(__file__).resolve().parents[1] / "data" / "demo.psworkspace"
+    return Path(__file__).resolve().parents[1] / "data" / "demo.pspack"
 
 
 _demo_label_cache = None
 
 
 def demo_label() -> str:
-    """The provenance `source:` label that import_workspace stamps for the demo."""
+    """The provenance `source:` label that import_pack stamps for the demo."""
     global _demo_label_cache
     if _demo_label_cache is None:
         m, _ = read_bundle(packaged_demo())

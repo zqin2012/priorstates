@@ -469,9 +469,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _api_export(self):
         tmp = os.path.join(tempfile.gettempdir(),
-                           f"ps-export-{os.getpid()}-{secrets.token_hex(4)}.psworkspace")
+                           f"ps-export-{os.getpid()}-{secrets.token_hex(4)}.pspack")
         try:
-            r = _engine("workspace", "export", "--out", tmp, timeout=60000)
+            r = _engine("pack", "export", "--out", tmp, timeout=60000)
         except subprocess.TimeoutExpired:
             return self._err(500, "export timed out")
         if r.returncode != 0:
@@ -485,7 +485,7 @@ class Handler(BaseHTTPRequestHandler):
             os.unlink(tmp)
         except OSError:
             pass
-        name = (os.path.basename(PROJECT_ROOT) if PROJECT_ROOT else "workspace") + ".psworkspace"
+        name = (os.path.basename(PROJECT_ROOT) if PROJECT_ROOT else "pack") + ".pspack"
         self.send_response(200)
         self.send_header("Content-Type", "application/gzip")
         self.send_header("Content-Disposition", f'attachment; filename="{name}"')
@@ -502,7 +502,7 @@ class Handler(BaseHTTPRequestHandler):
 
         def run(src, cleanup=None):
             try:
-                r = _engine("workspace", "import", src, "--yes", timeout=120000)
+                r = _engine("pack", "import", src, "--yes", timeout=120000)
             except subprocess.TimeoutExpired:
                 if cleanup:
                     cleanup()
@@ -518,9 +518,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._err(400, "url must be http(s)")
             return run(url_arg)
         if not body_buf or len(body_buf) < 2 or body_buf[0] != 0x1F or body_buf[1] != 0x8B:
-            return self._err(400, "not a .psworkspace (gzip) upload")
+            return self._err(400, "not a .pspack (gzip) upload")
         tmp = os.path.join(tempfile.gettempdir(),
-                           f"ps-import-{os.getpid()}-{secrets.token_hex(4)}.psworkspace")
+                           f"ps-import-{os.getpid()}-{secrets.token_hex(4)}.pspack")
         with open(tmp, "wb") as f:
             f.write(body_buf)
         run(tmp, lambda: (os.unlink(tmp) if os.path.exists(tmp) else None))
@@ -529,7 +529,7 @@ class Handler(BaseHTTPRequestHandler):
         if not ALLOW_WRITE:
             return self._err(403, "writes disabled -- start the cockpit with --allow-write")
         try:
-            r = _engine("workspace", "import", "--demo", "--yes", timeout=120000)
+            r = _engine("pack", "import", "--demo", "--yes", timeout=120000)
         except subprocess.TimeoutExpired:
             return self._err(500, "import timed out")
         if r.returncode != 0:

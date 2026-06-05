@@ -84,10 +84,11 @@ def _parse_toml_value(v: str):
 class Config:
     home: Path
     project_root: Path | None = None
-    # A named workspace ("area") — e.g. core-dev / strategy / ops / audit.
-    # When set, the *global* memory store lives under home/workspaces/<area>/,
-    # so each area has its own dense, scoped pack. The model cache and signing
-    # identity stay shared on the root home (no per-area re-download).
+    # A named "area" — e.g. core-dev / strategy / ops / audit. When set, the
+    # *global* memory store lives under home/areas/<area>/, so each area has its
+    # own dense, scoped pack. The model cache and signing identity stay shared on
+    # the root home (no per-area re-download). Distinct from a *project*
+    # (config.project_root, a folder/repo) and a *.pspack pack* (an export).
     area: str | None = None
     model: str = DEFAULT_MODEL
     embed_dtype: str = "float16"
@@ -113,7 +114,7 @@ class Config:
     @property
     def _area_root(self) -> Path:
         """Where the global memory store lives — the named area, or the root home."""
-        return (self.home / "workspaces" / self.area) if self.area else self.home
+        return (self.home / "areas" / self.area) if self.area else self.home
 
     @property
     def memory_global_dir(self) -> Path:
@@ -162,7 +163,7 @@ _AREA_RE = re.compile(r"[^a-z0-9_-]+")
 
 
 def safe_area(name: str | None) -> str | None:
-    """Sanitize a workspace/area name to a safe path segment (or None)."""
+    """Sanitize an area name to a safe path segment (or None)."""
     if not name:
         return None
     s = _AREA_RE.sub("-", name.strip().lower()).strip("-")
@@ -170,13 +171,14 @@ def safe_area(name: str | None) -> str | None:
 
 
 def current_area() -> str | None:
-    """The active named workspace, from $PRIORSTATES_WORKSPACE (or None = root)."""
-    return safe_area(os.environ.get("PRIORSTATES_WORKSPACE"))
+    """The active area, from $PRIORSTATES_AREA (or the old $PRIORSTATES_WORKSPACE)."""
+    return safe_area(os.environ.get("PRIORSTATES_AREA")
+                     or os.environ.get("PRIORSTATES_WORKSPACE"))
 
 
 def list_areas(home: Path) -> list[str]:
-    """Named workspaces that exist under home/workspaces/ (those with a memory dir)."""
-    base = Path(home) / "workspaces"
+    """Named areas that exist under home/areas/ (those with a memory dir)."""
+    base = Path(home) / "areas"
     if not base.is_dir():
         return []
     return sorted(d.name for d in base.iterdir() if (d / "memory").is_dir())

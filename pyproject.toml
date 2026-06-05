@@ -53,4 +53,4 @@ where = ["."]
 include = ["priorstates*"]
 
 [tool.setuptools.package-data]
-priorstates = ["cockpit/server.py", "cockpit/ptybridge.py", "cockpit/ptybridge_win.py", "cockpit/public/*", "cockpit/public/vendor/*", "data/*.psworkspace"]
+priorstates = ["cockpit/server.py", "cockpit/ptybridge.py", "cockpit/ptybridge_win.py", "cockpit/public/*", "cockpit/public/vendor/*", "data/*.pspack"]

@@ -201,11 +201,11 @@ def cmd_journal(args):
 # --------------------------------------------------------------------------- #
 # workspace share (export / import)
 # --------------------------------------------------------------------------- #
-def cmd_workspace(args):
+def cmd_pack(args):
     from .core import share
     cfg = load_config()
     if args.action == "export":
-        out = share.export_workspace(cfg, scope=args.scope, out_path=args.out,
+        out = share.export_pack(cfg, scope=args.scope, out_path=args.out,
                                      name=args.name, author=args.author,
                                      tags=getattr(args, "tag", None),
                                      types=getattr(args, "types", None),
@@ -216,11 +216,11 @@ def cmd_workspace(args):
         if (getattr(args, "tag", None) or getattr(args, "types", None)) and not manifest.get("memory") and not manifest.get("journal"):
             print("note: the selection matched nothing — check your --tag/--type "
                   "(tag a memory first with `priorstates memory tag <name> <tag>`).", file=sys.stderr)
-        print("Share that file; the recipient runs:  priorstates workspace import <file-or-url>")
+        print("Share that file; the recipient runs:  priorstates pack import <file-or-url>")
     elif args.action in ("import", "install"):
         src = share.packaged_demo() if getattr(args, "demo", False) else args.source
         if not src:
-            print("give a .psworkspace file/URL, or --demo", file=sys.stderr); sys.exit(2)
+            print("give a .pspack file/URL, or --demo", file=sys.stderr); sys.exit(2)
         manifest, members = share.read_bundle(src)
         print(share.summarize(manifest))
         # trust checks — imported memory is fed to your agents
@@ -253,7 +253,7 @@ def cmd_workspace(args):
                 sys.exit(2)
             if not risky and input("Import into your workspace? [y/N] ").strip().lower() not in ("y", "yes"):
                 print("cancelled."); return
-        res = share.import_workspace(cfg, src)
+        res = share.import_pack(cfg, src)
         msg = f"imported '{res['name']}': +{res['memory_added']} memories"
         if res["memory_renamed"]:
             msg += f" ({res['memory_renamed']} renamed to avoid clashes)"
@@ -270,9 +270,9 @@ def cmd_workspace(args):
         import urllib.request
         hub = (args.hub or os.environ.get("PRIORSTATES_HUB") or "https://priorstates.com/w").rstrip("/")
         key = os.environ.get("PRIORSTATES_HUB_KEY", "")
-        fd, tmp = tempfile.mkstemp(suffix=".psworkspace"); os.close(fd)
+        fd, tmp = tempfile.mkstemp(suffix=".pspack"); os.close(fd)
         try:
-            share.export_workspace(cfg, scope=args.scope, out_path=tmp, name=args.name, author=args.author,
+            share.export_pack(cfg, scope=args.scope, out_path=tmp, name=args.name, author=args.author,
                                    tags=getattr(args, "tag", None), types=getattr(args, "types", None),
                                    sign=getattr(args, "sign", False))
             manifest, _ = share.read_bundle(tmp)
@@ -311,7 +311,7 @@ def cmd_workspace(args):
         reg[res["id"]] = {"url": res["url"], "token": res["token"], "name": args.name or ""}
         pubf.write_text(json.dumps(reg, indent=2), encoding="utf-8")
         print(f"published → {res['url']}")
-        print(f"install:    priorstates workspace install {res['url']}")
+        print(f"install:    priorstates pack install {res['url']}")
         if res.get("listed"):
             print("listed in the hub directory → https://priorstates.com/browse.html")
         print(f"(edit token saved to {pubf} — keep it to delete the bundle later)")
@@ -321,9 +321,9 @@ def cmd_workspace(args):
         import urllib.error
         import urllib.request
         hub = (args.hub or os.environ.get("PRIORSTATES_HUB") or "https://priorstates.com/w").rstrip("/")
-        # resolve id (accept a bare id or a full .psworkspace URL) + edit token
+        # resolve id (accept a bare id or a full .pspack URL) + edit token
         ref = args.id.rstrip("/").rsplit("/", 1)[-1]
-        cid = ref[:-len(".psworkspace")] if ref.endswith(".psworkspace") else ref
+        cid = ref[:-len(".pspack")] if ref.endswith(".pspack") else ref
         pubf = cfg.home / "published.json"
         try:
             reg = json.loads(pubf.read_text(encoding="utf-8")) if pubf.exists() else {}
@@ -346,26 +346,26 @@ def cmd_workspace(args):
         print(f"unpublished {cid} from {hub}")
 
 
-def cmd_workspaces(args):
-    """List named workspaces (areas) and show which one is active."""
+def cmd_areas(args):
+    """List named areas and show which one is active."""
     from .core import config as _cfg
     home = _cfg.home_dir()
     active = _cfg.current_area()
     SKIP = {"MEMORY.md", "INDEX.md", "README.md"}
 
     def _count(area):
-        d = (home / "workspaces" / area / "memory") if area else (home / "memory")
+        d = (home / "areas" / area / "memory") if area else (home / "memory")
         return len([p for p in d.glob("*.md") if p.name not in SKIP]) if d.is_dir() else 0
 
     print(f"home: {home}")
-    print(f"active workspace: {active or '(default / root store)'}\n")
-    print("workspaces:")
+    print(f"active area: {active or '(default / root store)'}\n")
+    print("areas:")
     for area, label in [(None, "(default)")] + [(a, a) for a in _cfg.list_areas(home)]:
         mark = "*" if area == active else " "
         print(f" {mark} {label:<20} {_count(area):>4} memories")
     if not _cfg.list_areas(home):
-        print("\n(create one by running any command with --workspace NAME, e.g.\n"
-              "   priorstates --workspace strategy memory add \"…\")")
+        print("\n(create one by running any command with --area NAME, e.g.\n"
+              "   priorstates --area strategy memory add \"…\")")
 
 
 def cmd_identity(args):
@@ -1004,8 +1004,9 @@ def cmd_install_launcher(args):
 # --------------------------------------------------------------------------- #
 def build_parser():
     p = argparse.ArgumentParser("priorstates", description="PriorStates — shared memory & research journal for your AI agents (memory + journal + cockpit + mdlab).")
-    p.add_argument("--workspace", "-W", metavar="NAME",
-                   help="use the named workspace/area (core-dev, strategy, ops, …) instead of the default store")
+    p.add_argument("--area", "-A", metavar="NAME",
+                   help="use the named area (core-dev, strategy, ops, audit, …) instead of the default store")
+    p.add_argument("--workspace", "-W", metavar="NAME", help=argparse.SUPPRESS)  # deprecated alias for --area
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("init", help="initialize global + project scopes")
@@ -1051,9 +1052,9 @@ def build_parser():
     a.add_argument("text", nargs="?", help="plain-English note (or piped on stdin)")
     pj.set_defaults(func=cmd_journal)
 
-    pw = sub.add_parser("workspace", help="share a workspace (memory + journal)")
+    pw = sub.add_parser("pack", help="share a pack (memory + journal)")
     pws = pw.add_subparsers(dest="action", required=True)
-    we = pws.add_parser("export", help="bundle this workspace into a .psworkspace file")
+    we = pws.add_parser("export", help="bundle this pack into a .pspack file")
     we.add_argument("--scope", default="project", choices=["project", "global", "user", "all"])
     we.add_argument("--out"); we.add_argument("--name"); we.add_argument("--author")
     we.add_argument("--tag", action="append", metavar="TAG",
@@ -1061,13 +1062,13 @@ def build_parser():
     we.add_argument("--type", action="append", metavar="TYPE", dest="types",
                     help="export only memories of this type; repeatable")
     we.add_argument("--sign", action="store_true", help="sign the manifest with your publisher key (needs the `sign` extra)")
-    wi = pws.add_parser("import", help="import a .psworkspace file or URL (or --demo)")
-    wi.add_argument("source", nargs="?", help="path or http(s) URL to a .psworkspace")
+    wi = pws.add_parser("import", help="import a .pspack file or URL (or --demo)")
+    wi.add_argument("source", nargs="?", help="path or http(s) URL to a .pspack")
     wi.add_argument("--demo", action="store_true", help="import the bundled demo workspace")
     wi.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     wi.add_argument("--allow-flagged", action="store_true", help="import even if the injection scanner flags content")
     wl = pws.add_parser("install", help="install a workspace from a URL (alias for import)")
-    wl.add_argument("source", help="http(s) URL (or path) to a .psworkspace")
+    wl.add_argument("source", help="http(s) URL (or path) to a .pspack")
     wl.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     wl.add_argument("--allow-flagged", action="store_true", help="import even if the injection scanner flags content")
     wpub = pws.add_parser("publish", help="export + upload to the hub; prints a shareable link")
@@ -1081,13 +1082,13 @@ def build_parser():
     wpub.add_argument("--list", action="store_true", help="list it in the public hub directory (default: unlisted private link)")
     wpub.add_argument("--hub", help="hub base URL (default $PRIORSTATES_HUB or https://priorstates.com/w)")
     wun = pws.add_parser("unpublish", help="delete a published workspace from the hub (uses its saved edit token)")
-    wun.add_argument("id", help="the workspace id (or its .psworkspace URL)")
+    wun.add_argument("id", help="the workspace id (or its .pspack URL)")
     wun.add_argument("--token", help="edit token (default: looked up in ~/.priorstates/published.json)")
     wun.add_argument("--hub", help="hub base URL (default $PRIORSTATES_HUB or https://priorstates.com/w)")
-    pw.set_defaults(func=cmd_workspace)
+    pw.set_defaults(func=cmd_pack)
 
-    pws2 = sub.add_parser("workspaces", help="list named workspaces (areas) and the active one")
-    pws2.set_defaults(func=cmd_workspaces)
+    par = sub.add_parser("areas", help="list named areas (core-dev, strategy, …) and the active one")
+    par.set_defaults(func=cmd_areas)
 
     pid = sub.add_parser("identity", help="manage your publisher signing identity")
     pids = pid.add_subparsers(dest="action", required=False)
@@ -1166,9 +1167,11 @@ def main(argv=None):
     ensure_user_bin_on_path()    # so launched agents / subprocesses find ~/.local/bin CLIs
     ensure_editors_on_path()     # so editors (Antigravity, Cursor, …) not on PATH are found
     args = build_parser().parse_args(argv)
-    # --workspace selects a named area for every load_config() in this process.
-    if getattr(args, "workspace", None):
-        os.environ["PRIORSTATES_WORKSPACE"] = args.workspace
+    # --area (or the deprecated --workspace) selects a named area for every
+    # load_config() in this process.
+    area = getattr(args, "area", None) or getattr(args, "workspace", None)
+    if area:
+        os.environ["PRIORSTATES_AREA"] = area
     args.func(args)
 
 

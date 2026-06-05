@@ -14,7 +14,7 @@ is the whole mental model:
   projects. Selected with `--area NAME` (CLI) or the **Area dropdown** (GUI).
 
 > There's also a third thing that used to share the name "workspace": a
-> **`.psworkspace` pack**, which is a *portable export* of memory + journal you
+> **`.pspack` pack**, which is a *portable export* of memory + journal you
 > publish/import to share knowledge. That's an artifact, not a place or a lens —
 > see [the cockpit/share docs](USER_GUIDE.md#8-the-cockpit-web-and-the-desktop-gui).
 
@@ -73,14 +73,14 @@ validated. They tag it and publish only that subset:
 
 ```bash
 priorstates --area model-research memory tag "model M v3" promoted
-priorstates --area model-research workspace publish --tag promoted --sign
+priorstates --area model-research pack publish --tag promoted --sign
 ```
 
 The strategy teammate installs it into their area — provisional research never
 leaks across the boundary:
 
 ```bash
-priorstates --area strategy workspace install <link>
+priorstates --area strategy pack install <link>
 ```
 
 **D. Onboarding.** A new hire mounts the team's `core-dev` area pack once and

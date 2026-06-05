@@ -1,6 +1,6 @@
 """Publisher identity + manifest signatures (the seed of hub reputation).
 
-A `.psworkspace` manifest already commits to all content via per-file sha256.
+A `.pspack` manifest already commits to all content via per-file sha256.
 Signing the manifest therefore authenticates the whole bundle: `install` can show
 "signed by <handle>" (and warn loudly if a signature is present but invalid).
 

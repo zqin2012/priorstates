@@ -1242,10 +1242,10 @@ class PriorStatesGUI:
 
     def load_examples(self):
         # The "examples" are the bundled demo workspace — same path new users get
-        # from `priorstates workspace import --demo` (dogfoods the share feature).
+        # from `priorstates pack import --demo` (dogfoods the share feature).
         from ..core import share
         try:
-            res = share.import_workspace(self.cfg, share.packaged_demo())
+            res = share.import_pack(self.cfg, share.packaged_demo())
             note = "Loaded the demo pack: +%d memories" % res["memory_added"]
             note += (", +%d journal entries." % res["journal_added"]) if res["journal_added"] \
                 else " (open a project folder to also load the demo journal)."

@@ -1,6 +1,6 @@
 """The promotion gate: tag memories, then export only the tagged subset.
 
-Exercises `memory add --tag`, `memory tag`, and `workspace export --tag/--type`
+Exercises `memory add --tag`, `memory tag`, and `pack export --tag/--type`
 end to end through the public api/share layer, plus a round-trip import to prove
 the filtered bundle is valid and provenance-stamped.
 """
@@ -51,14 +51,14 @@ def test_promotion_gate_export(tmp_path):
     assert res["tags"] == ["promoted"]
 
     # unfiltered export carries all three
-    full = share.export_workspace(cfg, scope="project", out_path=tmp_path / "full.psworkspace")
+    full = share.export_pack(cfg, scope="project", out_path=tmp_path / "full.pspack")
     mfull, _ = share.read_bundle(full)
     assert len(mfull["memory"]) == 3
     assert "selection" not in mfull
 
     # the promotion gate: export only `promoted`
-    gated = share.export_workspace(cfg, scope="project", tags=["promoted"],
-                                   out_path=tmp_path / "promoted.psworkspace")
+    gated = share.export_pack(cfg, scope="project", tags=["promoted"],
+                                   out_path=tmp_path / "promoted.pspack")
     mg, _ = share.read_bundle(gated)
     names = sorted(m["name"] for m in mg["memory"])
     assert names == ["model M v3 live on 5A", "param P retune candidate"]
@@ -74,13 +74,13 @@ def test_promotion_gate_roundtrip_import(tmp_path):
                    body="b", scope="project", tags=["promoted"])
     mem.add_memory(cfg, name="provisional fact", type_str="project", description="d",
                    body="b", scope="project")
-    gated = share.export_workspace(cfg, scope="project", tags=["promoted"],
-                                   out_path=tmp_path / "g.psworkspace", name="strat-pack",
+    gated = share.export_pack(cfg, scope="project", tags=["promoted"],
+                                   out_path=tmp_path / "g.pspack", name="strat-pack",
                                    author="research")
 
-    # import into a fresh strategy workspace
+    # import into a fresh strategy area
     cfg2 = _cfg(tmp_path / "other")
-    res = share.import_workspace(cfg2, gated)
+    res = share.import_pack(cfg2, gated)
     assert res["memory_added"] == 1
     got = mem.get_memory(cfg2, "promoted fact")
     assert got is not None
@@ -96,8 +96,8 @@ def test_type_filter(tmp_path):
     cfg = _cfg(tmp_path)
     mem.add_memory(cfg, name="a proj", type_str="project", description="d", body="b", scope="project")
     mem.add_memory(cfg, name="a note", type_str="note", description="d", body="b", scope="project")
-    out = share.export_workspace(cfg, scope="project", types=["project"],
-                                 out_path=tmp_path / "t.psworkspace")
+    out = share.export_pack(cfg, scope="project", types=["project"],
+                                 out_path=tmp_path / "t.pspack")
     m, _ = share.read_bundle(out)
     assert [x["name"] for x in m["memory"]] == ["a proj"]
 
@@ -113,7 +113,7 @@ def _publish_args(**kw):
 
 
 def test_publish_gate_uploads_only_promoted(tmp_path, monkeypatch):
-    """`workspace publish --tag promoted` uploads only the gated subset."""
+    """`pack publish --tag promoted` uploads only the gated subset."""
     import io
     import json
     import urllib.request
@@ -134,13 +134,13 @@ def test_publish_gate_uploads_only_promoted(tmp_path, monkeypatch):
         def __exit__(self, *a): return False
 
     def fake_urlopen(req, timeout=0):
-        captured["bytes"] = req.data  # the uploaded .psworkspace
-        return _Resp(json.dumps({"id": "abc123", "url": "http://fake-hub/w/abc123.psworkspace",
+        captured["bytes"] = req.data  # the uploaded .pspack
+        return _Resp(json.dumps({"id": "abc123", "url": "http://fake-hub/w/abc123.pspack",
                                  "token": "tok", "listed": False}).encode())
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    cli.cmd_workspace(_publish_args(tag=["promoted"]))
+    cli.cmd_pack(_publish_args(tag=["promoted"]))
 
     manifest, _ = share.read_bundle(captured["bytes"])
     names = [m["name"] for m in manifest["memory"]]
@@ -167,12 +167,12 @@ def test_publish_refuses_empty_selection(tmp_path, monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", boom)
 
     with pytest.raises(SystemExit) as ei:
-        cli.cmd_workspace(_publish_args(tag=["nonexistent"]))
+        cli.cmd_pack(_publish_args(tag=["nonexistent"]))
     assert ei.value.code == 2
 
 
 def test_unpublish_uses_saved_token(tmp_path, monkeypatch):
-    """`workspace unpublish <id>` sends a token-authed DELETE and forgets it."""
+    """`pack unpublish <id>` sends a token-authed DELETE and forgets it."""
     import argparse
     import json
     import urllib.request
@@ -181,7 +181,7 @@ def test_unpublish_uses_saved_token(tmp_path, monkeypatch):
 
     cfg = _cfg(tmp_path)
     (cfg.home / "published.json").write_text(json.dumps({
-        "abc123": {"url": "http://fake-hub/w/abc123.psworkspace", "token": "edit-tok", "name": "x"}}))
+        "abc123": {"url": "http://fake-hub/w/abc123.pspack", "token": "edit-tok", "name": "x"}}))
     monkeypatch.setattr(cli, "load_config", lambda *a, **k: cfg)
 
     seen = {}
@@ -200,9 +200,9 @@ def test_unpublish_uses_saved_token(tmp_path, monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
     # accept a full URL too — should resolve to the bare id
-    ns = argparse.Namespace(action="unpublish", id="http://fake-hub/w/abc123.psworkspace",
+    ns = argparse.Namespace(action="unpublish", id="http://fake-hub/w/abc123.pspack",
                             token=None, hub="http://fake-hub/w")
-    cli.cmd_workspace(ns)
+    cli.cmd_pack(ns)
 
     assert seen["method"] == "DELETE"
     assert seen["url"] == "http://fake-hub/w/abc123"
