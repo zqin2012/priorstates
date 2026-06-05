@@ -154,6 +154,7 @@ priorstates workspace import --demo
 ## Docs
 
 - **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — the everyday-use manual. **Start here.**
+- **[docs/PROJECTS_AND_AREAS.md](docs/PROJECTS_AND_AREAS.md)** — Projects vs Areas: the two scoping axes + the GUI Area selector.
 - **[docs/QUICKSTART.md](docs/QUICKSTART.md)** — install + first run.
 - **[docs/RESEARCH_WORKFLOW.md](docs/RESEARCH_WORKFLOW.md)** — research folders + how agents log to the journal.
 - **[docs/DATA_MODEL.md](docs/DATA_MODEL.md)** — on-disk schemas + the `.psmem` layout.

@@ -67,6 +67,11 @@ PriorStates has two scopes:
 | **global** | `~/.priorstates/` | identity + cross-project preferences; the model | `priorstates init` (once) |
 | **project** | `<dir>/.priorstates/` | this project's **memory** *and* its **journal** | `priorstates init` **inside `<dir>`** |
 
+The global scope can be split into named **Areas** (`core-dev`, `strategy`,
+`ops`, …) so each kind of work gets its own dense memory pack — orthogonal to the
+project you're in. See **[Projects & Areas](PROJECTS_AND_AREAS.md)** for the
+two-axis model and the GUI Area selector.
+
 **A "research folder" is any directory you run `priorstates init` in.** It creates:
 
 ```
