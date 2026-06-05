@@ -59,6 +59,10 @@ Filename: "{code:GetPyExe}"; Parameters: "{code:PipInstallArgs}"; \
   StatusMsg: "Installing PriorStates into your Python..."; Flags: runhidden waituntilterminated
 Filename: "{code:GetPyExe}"; Parameters: "{code:InitArgs}"; \
   StatusMsg: "Initializing PriorStates..."; Flags: runhidden waituntilterminated
+; pywinpty gives the cockpit's embedded terminal a real TTY (so interactive CLIs
+; like codex work). Windows-only; small prebuilt wheel.
+Filename: "{code:GetPyExe}"; Parameters: "-m pip install --user pywinpty"; \
+  StatusMsg: "Installing cockpit terminal support..."; Flags: runhidden waituntilterminated
 ; Optional: install the MCP runtime + register it into any Claude / Codex / Gemini
 ; so wired agents actually get the PriorStates tools.
 Filename: "{code:GetPyExe}"; Parameters: "{code:McpInstallArgs}"; \

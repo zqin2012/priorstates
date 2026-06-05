@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
-"""Windows PTY bridge for the cockpit terminal -- pure ctypes ConPTY, no deps.
+"""Windows PTY bridge for the cockpit terminal.
 
 Mirrors ptybridge.py's wire contract so the cockpit server (server.py) treats
-both bridges identically. Runs argv[1:] (or a shell) attached to a Win32
-pseudo-console (ConPTY; Windows 10 1809+ / Windows 11) and relays:
+both bridges identically. Runs argv[1:] (or a shell) attached to a real
+pseudo-console and relays:
   pty output      -> this process's stdout (binary)   (cockpit -> browser via SSE)
   framed control  <- this process's stdin              (cockpit -> input/resize)
 
 Control frames on stdin: [4-byte big-endian length][1 type byte][payload]
   b'i' input bytes -> written to the pty
-  b'r' "cols,rows" -> ResizePseudoConsole
+  b'r' "cols,rows" -> resize
 
-If ConPTY is unavailable (older Windows) or fails to start, this falls back to a
-plain piped shell -- a working but non-PTY terminal (no cursor addressing).
-
-Uses only the standard library (ctypes + msvcrt), so the cockpit stays
-dependency-free on Windows just as it is on Unix.
+Three tiers, best-first:
+  1. pywinpty -- a real ConPTY (with a helper agent) that gives the child CONSOLE
+     std handles even though this bridge's own handles are pipes. This is the only
+     tier that yields a true TTY for interactive CLIs (codex etc.); installed by
+     the Windows installer / `pip install priorstates[winterm]`.
+  2. raw ctypes ConPTY -- stdlib-only; renders ANSI nicely but can't present a
+     true TTY when the bridge's handles are pipes (the common cockpit case).
+  3. plain piped shell -- always works for simple, non-interactive commands.
 """
 import os
 import struct
 import subprocess
 import sys
 import threading
+import time
 
 
 def _binary_stdio():
@@ -110,9 +114,9 @@ def run_conpty(cmd) -> bool:
     k32.InitializeProcThreadAttributeList.argtypes = [
         LPVOID, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(SIZE_T)]
     k32.InitializeProcThreadAttributeList.restype = wintypes.BOOL
-    k32.UpdateProcThreadAttributeList.argtypes = [
+    k32.UpdateProcThreadAttribute.argtypes = [
         LPVOID, wintypes.DWORD, ULONG_PTR, LPVOID, SIZE_T, LPVOID, ctypes.POINTER(SIZE_T)]
-    k32.UpdateProcThreadAttributeList.restype = wintypes.BOOL
+    k32.UpdateProcThreadAttribute.restype = wintypes.BOOL
     k32.DeleteProcThreadAttributeList.argtypes = [LPVOID]
     k32.CreateProcessW.argtypes = [
         wintypes.LPCWSTR, wintypes.LPWSTR, LPVOID, LPVOID, wintypes.BOOL,
@@ -156,7 +160,7 @@ def run_conpty(cmd) -> bool:
     si.lpAttributeList = ctypes.cast(attr_buf, LPVOID)
     if not k32.InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, ctypes.byref(needed)):
         return False
-    if not k32.UpdateProcThreadAttributeList(
+    if not k32.UpdateProcThreadAttribute(
             si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
             hPC, ctypes.sizeof(HPCON), None, None):
         return False
@@ -251,14 +255,75 @@ def run_pipe_fallback(cmd):
         pass
 
 
+# --------------------------------------------------------------------------- #
+# Preferred: pywinpty (a real ConPTY with a helper agent). It correctly gives
+# the child CONSOLE std handles even though this bridge process itself has piped
+# std handles -- the edge case raw ctypes ConPTY can't handle, and the reason
+# interactive CLIs (codex, etc.) otherwise report "stdin is not a terminal".
+# --------------------------------------------------------------------------- #
+def run_winpty(cmd) -> bool:
+    import winpty   # raises ImportError if not installed -> caller falls through
+    proc = winpty.PtyProcess.spawn(list(cmd), cwd=os.getcwd(),
+                                   env=dict(os.environ), dimensions=(24, 80))
+
+    def reader():
+        out = sys.stdout.buffer
+        while True:
+            try:
+                data = proc.read(65536)        # str (utf-8); ConPTY emits utf-8
+            except EOFError:
+                break
+            except Exception:
+                break
+            if data:
+                try:
+                    out.write(data.encode("utf-8", "replace") if isinstance(data, str) else data)
+                    out.flush()
+                except Exception:
+                    break
+            else:
+                if not proc.isalive():
+                    break
+                time.sleep(0.01)        # in case read() is non-blocking
+        os._exit(0)
+
+    threading.Thread(target=reader, daemon=True).start()
+    for typ, payload in _frames(sys.stdin.buffer):
+        if typ == b"i" and payload:
+            try:
+                proc.write(payload.decode("utf-8", "replace"))
+            except Exception:
+                break
+        elif typ == b"r":
+            try:
+                cols, rows = payload.decode("ascii", "replace").split(",")
+                proc.setwinsize(int(rows), int(cols))
+            except Exception:
+                pass
+    try:
+        proc.terminate(force=True)
+    except Exception:
+        pass
+    return True
+
+
 def main():
     _binary_stdio()
     cmd = sys.argv[1:] or [os.environ.get("COMSPEC", "cmd.exe")]
+    # 1) pywinpty -- a real TTY (handles this bridge's piped std handles).
+    try:
+        if run_winpty(cmd):
+            return
+    except Exception:
+        pass
+    # 2) raw ctypes ConPTY -- nice ANSI rendering, but not a true TTY when the
+    #    bridge's own handles are pipes (so interactive TUI CLIs may complain).
     try:
         if run_conpty(cmd):
             return
     except Exception:
         pass
+    # 3) plain piped shell -- always works for simple commands.
     run_pipe_fallback(cmd)
 
 

@@ -28,9 +28,13 @@ extras = ["pyyaml>=6", "pandas>=2"]
 # mdlab python blocks with a persistent Jupyter kernel (optional; an in-process
 # executor is used when these are absent).
 kernel = ["jupyter_client>=8", "ipykernel>=6"]
+# A real TTY for the cockpit's embedded terminal on Windows (so interactive CLIs
+# like codex work). No-op elsewhere; Unix uses the stdlib pty.
+winterm = ["pywinpty>=2; sys_platform=='win32'"]
 full = [
   "onnxruntime>=1.16", "tokenizers>=0.15", "mcp>=1.2",
   "pyyaml>=6", "pandas>=2", "jupyter_client>=8", "ipykernel>=6",
+  "pywinpty>=2; sys_platform=='win32'",
 ]
 
 [project.scripts]
