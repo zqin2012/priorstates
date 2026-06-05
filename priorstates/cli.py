@@ -235,6 +235,12 @@ def cmd_pack(args):
         if sig_status == "invalid":
             print(f"\n✗ SIGNATURE INVALID ({sig_who}) — the bundle was tampered with "
                   "or signed by a mismatched key.", file=sys.stderr)
+        # enterprise/policy plugins can hard-block an import (DLP, require-signed, …)
+        from .core import plugins as _plugins
+        _ok, _reasons = _plugins.registry(cfg).check_import(manifest, members, cfg)
+        if not _ok:
+            print("✗ blocked by policy: " + "; ".join(_reasons), file=sys.stderr)
+            sys.exit(4)
         is_demo = getattr(args, "demo", False)  # the bundled demo is trusted
         allow_flagged = getattr(args, "allow_flagged", False) or is_demo
         risky = bool(flagged) or sig_status == "invalid"
@@ -295,6 +301,9 @@ def cmd_pack(args):
             req.add_header("X-PriorStates-Key", key)
         if getattr(args, "list", False):
             req.add_header("X-Listed", "1")
+        from .core import plugins as _plugins
+        for _h, _v in _plugins.registry().hub_headers(hub).items():  # SSO/EE auth
+            req.add_header(_h, _v)
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 res = json.loads(r.read().decode("utf-8"))
@@ -335,6 +344,9 @@ def cmd_pack(args):
                   file=sys.stderr); sys.exit(2)
         req = urllib.request.Request(f"{hub}/{cid}", method="DELETE",
                                      headers={"X-Edit-Token": token})
+        from .core import plugins as _plugins
+        for _h, _v in _plugins.registry().hub_headers(hub).items():  # SSO/EE auth
+            req.add_header(_h, _v)
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 r.read()
@@ -720,7 +732,10 @@ def cmd_mcp(args):
 
 def cmd_doctor(args):
     cfg = load_config()
+    from .core import plugins as _plugins
     from .core.embedder import get_embedder
+    reg = _plugins.registry(cfg)
+    print(f"edition:        {reg.edition}" + (f"  (plugins: {', '.join(reg.plugins)})" if reg.plugins else ""))
     print(f"home:           {cfg.home}")
     print(f"project_root:   {cfg.project_root}")
     print(f"journal_dir:    {cfg.journal_dir}")
@@ -1152,6 +1167,15 @@ def build_parser():
     pdl.add_argument("--desktop", action="store_true", help="also place an icon on your Desktop")
     pdl.add_argument("--uninstall", action="store_true", help="remove the launcher")
     pdl.set_defaults(func=cmd_install_launcher)
+
+    # extension seam: let installed plugins (e.g. an enterprise edition) add
+    # their own subcommands. Plugins register via the "priorstates.plugins"
+    # entry-point group or [plugins] load = … in config.toml.
+    try:
+        from .core import plugins as _plugins
+        _plugins.registry(load_config()).apply_commands(sub)
+    except Exception as _e:  # never let a plugin break the core CLI
+        print(f"[priorstates] plugin load skipped: {_e}", file=sys.stderr)
     return p
 
 

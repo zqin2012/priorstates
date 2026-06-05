@@ -193,6 +193,9 @@ def read_bundle(src) -> tuple[dict, dict]:
         key = os.environ.get("PRIORSTATES_HUB_KEY")
         if key:  # access-controlled internal hub gates reads on this header
             req.add_header("X-PriorStates-Key", key)
+        from . import plugins
+        for h, v in plugins.registry().hub_headers(str(src)).items():  # SSO/EE auth
+            req.add_header(h, v)
         with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 (user-provided URL)
             data = r.read()
     else:
