@@ -28,19 +28,36 @@ def _h(p: str) -> Path:
     return Path.home() / p
 
 
-def _claude_desktop_config() -> Path:
-    """Claude Desktop's MCP config file (separate app from Claude Code)."""
+def _claude_desktop_paths() -> tuple[Path, Path]:
+    """(config_file, install_marker) for Claude Desktop (separate app from Claude
+    Code), per platform.
+
+    On Windows it's usually an MSIX/Store package: writes to %APPDATA%\\Claude are
+    redirected into the package's LocalCache, and that's where the app actually
+    reads its config — so the standard %APPDATA%\\Claude path is wrong there. The
+    package dir is the reliable 'installed' marker (it exists even before any
+    config is written)."""
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+        base = Path.home() / "Library" / "Application Support" / "Claude"
+        return base / "claude_desktop_config.json", base
     if os.name == "nt":
-        base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        return Path(base) / "Claude" / "claude_desktop_config.json"
+        local = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
+        try:
+            for d in sorted((local / "Packages").glob("Claude_*")):
+                if d.is_dir():
+                    cfg = d / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json"
+                    return cfg, d
+        except OSError:
+            pass
+        appdata = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
+        base = appdata / "Claude"
+        return base / "claude_desktop_config.json", base
     # Linux (community builds): XDG config dir.
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "Claude" / "claude_desktop_config.json"
+    base = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")) / "Claude"
+    return base / "claude_desktop_config.json", base
 
 
-_CLAUDE_DESKTOP = _claude_desktop_config()
+_CLAUDE_DESKTOP, _CLAUDE_DESKTOP_MARKER = _claude_desktop_paths()
 
 
 ADAPTERS: dict[str, Adapter] = {
@@ -80,7 +97,7 @@ ADAPTERS: dict[str, Adapter] = {
         mcp_format="json",
         mcp_key="mcpServers",
         context_files=(),               # Claude Desktop has no CLAUDE.md surface
-        home_marker=_CLAUDE_DESKTOP.parent,   # the Claude app config dir
+        home_marker=_CLAUDE_DESKTOP_MARKER,   # package dir (MSIX) or %APPDATA%\Claude
         project_context_name="",        # no per-project context
     ),
     # Google Antigravity — agentic VSCode fork. MCP config lives under
