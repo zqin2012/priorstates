@@ -520,6 +520,12 @@ def cmd_connect(args):
     # remote file in YOUR editor via `code --remote …`. PS_SSH_HOST/PS_OPENER_PORT
     # are passed through to the cockpit so the browser knows where to call.
     opener_port = _start_local_opener(host)
+    # Open-in-editor runs on THIS client via the opener, so tell the cockpit which
+    # editors the client actually has — its buttons should reflect those, not the
+    # remote host's (e.g. a stray `antigravity` binary on the server).
+    import shutil as _sh
+    client_eds = ",".join(b for b in ("code", "code-insiders", "cursor", "windsurf", "antigravity")
+                          if _sh.which(b))
     # A ~-based remote project must be resolved to an ABSOLUTE path on the remote:
     # VSCode/antigravity --remote don't tilde-expand, and the nested shell quoting
     # around a literal ~ is fragile. Resolve it via the (already-authenticated) SSH
@@ -544,7 +550,7 @@ def cmd_connect(args):
     proj = f" --project {shlex.quote(args.project)}" if args.project else ""
     term = " --terminal" if getattr(args, "terminal", False) else ""
     remote_cmd = (f"sh -lc 'PATH=$HOME/.local/bin:$PATH PS_SSH_HOST={host} "
-                  f"PS_OPENER_PORT={opener_port} {runner} cockpit "
+                  f"PS_OPENER_PORT={opener_port} PS_OPENER_EDITORS={client_eds} {runner} cockpit "
                   f"--host 127.0.0.1 --port {rport} --allow-write --allow-open{term}{proj}'")
 
     # 3) SSH with a port-forward; the cockpit (and any code it runs) lives on the

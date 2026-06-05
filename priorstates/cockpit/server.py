@@ -68,7 +68,17 @@ ROOTS = [os.path.abspath(p) for p in (HOME, PROJECT_ROOT) if p]
 EDITOR_CANDIDATES = [("code", "VSCode"), ("antigravity", "Antigravity"),
                      ("cursor", "Cursor"), ("windsurf", "Windsurf"),
                      ("code-insiders", "VSCode Insiders")]
-EDITORS = [{"bin": b, "label": lbl} for b, lbl in EDITOR_CANDIDATES if shutil.which(b)]
+# For a REMOTE cockpit (served via `priorstates connect`), open-in-editor runs on
+# the CLIENT via `code --remote …`, so the buttons must reflect the CLIENT's
+# editors (passed in as PS_OPENER_EDITORS), NOT this remote host's. Otherwise a
+# button shows for an editor the client can't launch (e.g. a stray `antigravity`
+# binary here) and the open fails.
+_OPENER_EDITORS = os.environ.get("PS_OPENER_EDITORS")
+if OPENER_PORT and _OPENER_EDITORS is not None:
+    _avail = set(filter(None, _OPENER_EDITORS.split(",")))
+    EDITORS = [{"bin": b, "label": lbl} for b, lbl in EDITOR_CANDIDATES if b in _avail]
+else:
+    EDITORS = [{"bin": b, "label": lbl} for b, lbl in EDITOR_CANDIDATES if shutil.which(b)]
 
 
 def under_root(p: str) -> bool:
