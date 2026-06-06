@@ -6,8 +6,9 @@ managed from a **desktop GUI** or the CLI. Everything runs on your machine; no
 cloud calls, no telemetry.
 
 This is the everyday-use manual. See also: [QUICKSTART.md](QUICKSTART.md) (the
-short version), [packaging/README.md](../packaging/README.md) (native
-installers).
+short version). One-click native installers — the free **Hub edition** (adds the
+relay, cross-device sync, and the ChatGPT connector) — are at
+**https://priorstates.com/download**.
 
 ## Contents
 
@@ -27,15 +28,11 @@ installers).
 
 ## 1. Install
 
-Native packages (recommended for end users):
+One-click installers (recommended for end users) bundle the free **Hub edition**
+(memory + relay + cross-device sync + ChatGPT connector) — macOS `.pkg`,
+Windows `.exe`, Linux `.tar.gz` — at **https://priorstates.com/download**.
 
-| OS | How |
-|---|---|
-| Ubuntu/Debian | `sudo apt install ./priorstates_0.1.0_all.deb` |
-| macOS (.pkg) | double-click `PriorStates-0.1.0.pkg` |
-| macOS (brew) | `brew install --build-from-source packaging/macos/priorstates.rb` |
-
-Cross-platform (pip):
+The open core, via pip (any OS with Python 3.10+):
 
 ```bash
 python3 -m pip install --user --upgrade pip setuptools wheel   # important

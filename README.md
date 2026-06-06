@@ -158,7 +158,7 @@ priorstates pack import --demo
 - **[docs/QUICKSTART.md](docs/QUICKSTART.md)** — install + first run.
 - **[docs/RESEARCH_WORKFLOW.md](docs/RESEARCH_WORKFLOW.md)** — research folders + how agents log to the journal.
 - **[docs/DATA_MODEL.md](docs/DATA_MODEL.md)** — on-disk schemas + the `.psmem` layout.
-- **[packaging/README.md](packaging/README.md)** — native `.deb` / macOS / Windows packages.
+- One-click native installers (the free **Hub edition**) — macOS / Windows / Linux — at **https://priorstates.com/download**.
 
 ## Status
 
