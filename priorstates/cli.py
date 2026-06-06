@@ -268,104 +268,6 @@ def cmd_pack(args):
             msg += "  (journal skipped — run `priorstates init` in a project to import it)"
         print(msg)
         print("Your agents can recall the new memories now (restart the agent if it caches tools).")
-    elif args.action == "publish":
-        import json
-        import os
-        import tempfile
-        import urllib.error
-        import urllib.request
-        hub = (args.hub or os.environ.get("PRIORSTATES_HUB") or "https://priorstates.com/w").rstrip("/")
-        key = os.environ.get("PRIORSTATES_HUB_KEY", "")
-        fd, tmp = tempfile.mkstemp(suffix=".pspack"); os.close(fd)
-        try:
-            share.export_pack(cfg, scope=args.scope, out_path=tmp, name=args.name, author=args.author,
-                                   tags=getattr(args, "tag", None), types=getattr(args, "types", None),
-                                   sign=getattr(args, "sign", False))
-            manifest, _ = share.read_bundle(tmp)
-            data = open(tmp, "rb").read()
-        finally:
-            try: os.unlink(tmp)
-            except OSError: pass
-        # show what's about to be published (publish is outward-facing); the
-        # promotion gate must not silently upload an empty selection.
-        filtered = bool(getattr(args, "tag", None) or getattr(args, "types", None))
-        print("publishing: " + share.summarize(manifest))
-        if filtered and not manifest.get("memory") and not manifest.get("journal"):
-            print("refusing to publish an empty selection — nothing matched your "
-                  "--tag/--type. Tag a memory first: `priorstates memory tag <name> <tag>`.",
-                  file=sys.stderr)
-            sys.exit(2)
-        req = urllib.request.Request(hub, data=data, method="POST",
-                                     headers={"Content-Type": "application/octet-stream"})
-        if key:
-            req.add_header("X-PriorStates-Key", key)
-        if getattr(args, "list", False):
-            req.add_header("X-Listed", "1")
-        from .core import plugins as _plugins
-        for _h, _v in _plugins.registry().hub_headers(hub).items():  # SSO/EE auth
-            req.add_header(_h, _v)
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                res = json.loads(r.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            print(f"publish failed ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
-            if e.code == 403:
-                print("This hub requires a key — set PRIORSTATES_HUB_KEY.", file=sys.stderr)
-            sys.exit(1)
-        pubf = cfg.home / "published.json"
-        try:
-            reg = json.loads(pubf.read_text(encoding="utf-8")) if pubf.exists() else {}
-        except Exception:
-            reg = {}
-        reg[res["id"]] = {"url": res["url"], "token": res["token"], "name": args.name or ""}
-        pubf.write_text(json.dumps(reg, indent=2), encoding="utf-8")
-        print(f"published → {res['url']}")
-        print(f"install:    priorstates pack install {res['url']}")
-        if res.get("listed"):
-            print("listed in the hub directory → https://priorstates.com/browse.html")
-        print(f"(edit token saved to {pubf} — keep it to delete the bundle later)")
-    elif args.action == "unpublish":
-        import json
-        import os
-        import urllib.error
-        import urllib.request
-        hub = (args.hub or os.environ.get("PRIORSTATES_HUB") or "https://priorstates.com/w").rstrip("/")
-        # resolve id (accept a bare id or a full .pspack URL) + edit token
-        ref = args.id.rstrip("/").rsplit("/", 1)[-1]
-        cid = ref[:-len(".pspack")] if ref.endswith(".pspack") else ref
-        pubf = cfg.home / "published.json"
-        try:
-            reg = json.loads(pubf.read_text(encoding="utf-8")) if pubf.exists() else {}
-        except Exception:
-            reg = {}
-        token = args.token or (reg.get(cid) or {}).get("token")
-        if not token:
-            print(f"no edit token for {cid!r} (not in {pubf}); pass --token <token>.",
-                  file=sys.stderr); sys.exit(2)
-        req = urllib.request.Request(f"{hub}/{cid}", method="DELETE",
-                                     headers={"X-Edit-Token": token})
-        from .core import plugins as _plugins
-        for _h, _v in _plugins.registry().hub_headers(hub).items():  # SSO/EE auth
-            req.add_header(_h, _v)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                r.read()
-        except urllib.error.HTTPError as e:
-            print(f"unpublish failed ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
-            sys.exit(1)
-        if cid in reg:
-            del reg[cid]; pubf.write_text(json.dumps(reg, indent=2), encoding="utf-8")
-        print(f"unpublished {cid} from {hub}")
-
-
-def cmd_relay(args):
-    from . import relay
-    def _ready(hub, toolnames):
-        print(f"relay connected → {hub}")
-        print(f"serving {len(toolnames)} tool(s) ({'read+write' if args.allow_write else 'recall-only'}): "
-              f"{', '.join(toolnames)}")
-        print("web/mobile agents pointed at this hub can now reach this machine's memory. Ctrl-C to stop.")
-    relay.serve(getattr(args, "hub", None), allow_write=args.allow_write, on_ready=_ready)
 
 
 def cmd_areas(args):
@@ -1096,32 +998,10 @@ def build_parser():
     wl.add_argument("source", help="http(s) URL (or path) to a .pspack")
     wl.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     wl.add_argument("--allow-flagged", action="store_true", help="import even if the injection scanner flags content")
-    wpub = pws.add_parser("publish", help="export + upload to the hub; prints a shareable link")
-    wpub.add_argument("--scope", default="project", choices=["project", "global", "user", "all"])
-    wpub.add_argument("--name"); wpub.add_argument("--author")
-    wpub.add_argument("--tag", action="append", metavar="TAG",
-                      help="publish only items carrying this tag (the promotion gate); repeatable")
-    wpub.add_argument("--type", action="append", metavar="TYPE", dest="types",
-                      help="publish only memories of this type; repeatable")
-    wpub.add_argument("--sign", action="store_true", help="sign the manifest with your publisher key (needs the `sign` extra)")
-    wpub.add_argument("--list", action="store_true", help="list it in the public hub directory (default: unlisted private link)")
-    wpub.add_argument("--hub", help="hub base URL (default $PRIORSTATES_HUB or https://priorstates.com/w)")
-    wun = pws.add_parser("unpublish", help="delete a published workspace from the hub (uses its saved edit token)")
-    wun.add_argument("id", help="the workspace id (or its .pspack URL)")
-    wun.add_argument("--token", help="edit token (default: looked up in ~/.priorstates/published.json)")
-    wun.add_argument("--hub", help="hub base URL (default $PRIORSTATES_HUB or https://priorstates.com/w)")
     pw.set_defaults(func=cmd_pack)
 
     par = sub.add_parser("areas", help="list named areas (core-dev, strategy, …) and the active one")
     par.set_defaults(func=cmd_areas)
-
-    prl = sub.add_parser("relay", help="serve this machine's memory to web/mobile agents via the hub")
-    prls = prl.add_subparsers(dest="action", required=True)
-    prc = prls.add_parser("connect", help="dial the hub and answer relayed tool calls (Ctrl-C to stop)")
-    prc.add_argument("--hub", help="hub base URL (default $PRIORSTATES_HUB or https://priorstates.com/w)")
-    prc.add_argument("--allow-write", action="store_true",
-                     help="also expose memory_add/journal_add (default: recall-only)")
-    prl.set_defaults(func=cmd_relay)
 
     pid = sub.add_parser("identity", help="manage your publisher signing identity")
     pids = pid.add_subparsers(dest="action", required=False)

@@ -73,7 +73,10 @@ validated. They tag it and publish only that subset:
 
 ```bash
 priorstates --area model-research memory tag "model M v3" promoted
-priorstates --area model-research pack publish --tag promoted --sign
+# share offline (open core):
+priorstates --area model-research pack export --tag promoted --sign --out m.pspack
+# or publish to the hub (free `priorstates-hub` edition):
+priorstates --area model-research publish --tag promoted --sign
 ```
 
 The strategy teammate installs it into their area — provisional research never
