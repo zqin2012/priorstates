@@ -36,6 +36,7 @@ class Registry:
         self._config_providers = []           # fn(cfg) -> cfg
         self._import_policies = []            # fn(manifest, members, cfg) -> (ok, reasons)
         self._service_providers = []          # fn() -> dict|list[dict] managed services
+        self._account_providers = []          # fn() -> {logged_in, user, hub} | None
 
     # -- registration API (called by plugins) ---------------------------- #
     def set_edition(self, name: str) -> None:
@@ -61,8 +62,16 @@ class Registry:
     def add_service(self, fn) -> None:
         """fn() -> dict | list[dict] describing background service(s) the desktop
         GUI can start/stop (e.g. the Hub edition's relay). Each dict:
-        {name, label, help, argv:[…], status_url?, status_key?, needs_login?}."""
+        {name, label, help, argv:[…], status_url?, status_key?, needs_login?,
+         options?: [{flag, type:"bool"|"str", label, default?, help?, requires?,
+                     generate?, secret?, danger?}]}. The GUI renders each option
+        as a toggle/field and appends the chosen flags to argv on start."""
         self._service_providers.append(fn)
+
+    def add_account_status(self, fn) -> None:
+        """fn() -> {logged_in: bool, user?: str, hub?: str} | None — lets the GUI
+        show sign-in state (an edition that has accounts registers this)."""
+        self._account_providers.append(fn)
 
     # -- consumption API (called by the open client) --------------------- #
     def apply_commands(self, subparsers) -> None:
@@ -99,6 +108,17 @@ class Registry:
             except Exception as e:
                 print(f"[priorstates] plugin service hook failed: {e}", file=sys.stderr)
         return out
+
+    def account_status(self) -> dict:
+        """First plugin-reported account status (for the GUI), or {} if none."""
+        for fn in self._account_providers:
+            try:
+                r = fn()
+                if r:
+                    return r
+            except Exception as e:
+                print(f"[priorstates] plugin account hook failed: {e}", file=sys.stderr)
+        return {}
 
     def check_import(self, manifest, members, cfg) -> tuple[bool, list]:
         for fn in self._import_policies:

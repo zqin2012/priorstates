@@ -1580,13 +1580,15 @@ class PriorStatesGUI:
         head = ttk.Frame(f); head.pack(fill="x", padx=16, pady=(12, 4))
         tk.Label(head, text="Connections", bg=BG, fg=FG,
                  font=(self._fam(), 13, "bold")).pack(anchor="w")
-        tk.Label(head, text=("Background services that connect your local memory to the cloud "
-                             "apps. They run while PriorStates is open."),
+        tk.Label(head, text=("Sign in, then choose what this machine shares — all from here, "
+                             "no command line. Services run while PriorStates is open."),
                  bg=BG, fg=DIM, wraplength=820, justify="left",
                  font=(self._fam(), 9)).pack(anchor="w", pady=(2, 0))
         self._svc_proc = {}        # name -> Popen
-        self._svc_rows = {}        # name -> {status, btn, spec, auto}
+        self._svc_rows = {}        # name -> {status, btn, spec, auto, opts, note}
+        self._acct_box = ttk.Frame(f); self._acct_box.pack(fill="x", padx=16, pady=(10, 2))
         self._svc_box = ttk.Frame(f); self._svc_box.pack(fill="both", expand=True, padx=16, pady=8)
+        self._render_account()
         self._render_services()
         # auto-start flagged services, then begin the status poll loop
         auto = self._svc_autostart_set()
@@ -1624,7 +1626,7 @@ class PriorStatesGUI:
         auto = self._svc_autostart_set()
         for spec in svcs:
             name = spec.get("name")
-            row = ttk.Frame(box); row.pack(fill="x", pady=(0, 14))
+            row = ttk.Frame(box); row.pack(fill="x", pady=(0, 16))
             tk.Label(row, text=spec.get("label", name), bg=BG, fg=FG,
                      font=(self._fam(), 10, "bold")).pack(anchor="w")
             tk.Label(row, text=spec.get("help", ""), bg=BG, fg=DIM, wraplength=780,
@@ -1638,7 +1640,33 @@ class PriorStatesGUI:
             cb = ttk.Checkbutton(ctl, text="Start when PriorStates opens", variable=av,
                                  command=lambda n=name, v=av: self._svc_set_autostart(n, v.get()))
             cb.pack(side="right")
-            self._svc_rows[name] = {"status": sv, "btn": btn, "spec": spec, "auto": av}
+            # per-service options (rendered from the plugin descriptor; OSS GUI stays generic)
+            saved = self._svc_opts(name)
+            opts = {}
+            for o in spec.get("options", []) or []:
+                flag = o.get("flag")
+                if o.get("type", "bool") == "bool":
+                    var = tk.BooleanVar(value=bool(saved.get(flag, o.get("default", False))))
+                    ttk.Checkbutton(row, text=o.get("label", flag), variable=var,
+                                    command=lambda n=name: self._svc_save_opts(n)).pack(anchor="w", padx=8, pady=(4, 0))
+                    if o.get("help"):
+                        tk.Label(row, text=o["help"], bg=BG, fg=DIM, wraplength=720, justify="left",
+                                 font=(self._fam(), 8)).pack(anchor="w", padx=28)
+                else:
+                    line = ttk.Frame(row); line.pack(anchor="w", fill="x", padx=8, pady=(4, 0))
+                    tk.Label(line, text=o.get("label", flag) + ":", bg=BG, fg=DIM,
+                             font=(self._fam(), 9)).pack(side="left")
+                    var = tk.StringVar(value=str(saved.get(flag, o.get("default", "") or "")))
+                    ttk.Entry(line, textvariable=var, width=24,
+                              show=("*" if o.get("secret") else "")).pack(side="left", padx=6)
+                    if o.get("help"):
+                        tk.Label(line, text=o["help"], bg=BG, fg=DIM, font=(self._fam(), 8)).pack(side="left")
+                opts[flag] = var
+            note = tk.StringVar(value="")
+            tk.Label(row, textvariable=note, bg=BG, fg="#3fb950",
+                     wraplength=740, justify="left", font=(self._fam(), 9)).pack(anchor="w", pady=(4, 0))
+            self._svc_rows[name] = {"status": sv, "btn": btn, "spec": spec, "auto": av,
+                                    "opts": opts, "note": note}
 
     def _svc_toggle(self, spec):
         name = spec.get("name")
@@ -1650,23 +1678,51 @@ class PriorStatesGUI:
         self._svc_apply_state()
 
     def _svc_start(self, spec):
+        import secrets
         name = spec.get("name")
         if spec.get("needs_login"):
-            self.set_status(f"{spec.get('label', name)}: not logged in — run "
-                            f"`priorstates login` (or `signup`) first.")
+            self.set_status(f"{spec.get('label', name)}: sign in first (use Sign in above).")
             return
+        argv = list(spec.get("argv") or [])
+        opts = (self._svc_rows.get(name) or {}).get("opts") or {}
+        specopts = spec.get("options", []) or []
+        bool_on = {o["flag"] for o in specopts
+                   if o.get("type", "bool") == "bool" and opts.get(o["flag"]) is not None and opts[o["flag"]].get()}
+        notes = []
+        for o in specopts:
+            flag = o.get("flag")
+            var = opts.get(flag)
+            if var is None:
+                continue
+            req = o.get("requires")
+            if req and req not in bool_on:           # dependency toggle is off → skip
+                continue
+            if o.get("type", "bool") == "bool":
+                if var.get():
+                    argv.append(flag)
+            else:
+                val = (var.get() or "").strip()
+                if not val and o.get("generate"):
+                    val = secrets.token_hex(4); var.set(val)
+                if val:
+                    argv += [flag, val]
+                    if o.get("secret"):
+                        notes.append(f"{o.get('label', flag)}: {val}")
+        self._svc_save_opts(name)
         env = dict(os.environ)
         env["PRIORSTATES_HOME"] = str(self.cfg.home)
         if self.area:
             env["PRIORSTATES_AREA"] = self.area
         try:
-            p = subprocess.Popen(spec.get("argv") or [], env=env,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 creationflags=_CNW)
+            p = subprocess.Popen(argv, env=env, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, creationflags=_CNW)
         except Exception as e:
             self.set_status(f"could not start {name}: {e}")
             return
         self._svc_proc[name] = p
+        r = self._svc_rows.get(name) or {}
+        if r.get("note") is not None:
+            r["note"].set(("  •  ".join(notes) + "   (enter this in the browser terminal)") if notes else "")
         self.set_status(f"{spec.get('label', name)} started — keep PriorStates open to stay connected")
 
     def _svc_stop(self, name):
@@ -1733,29 +1789,118 @@ class PriorStatesGUI:
     def _svc_state_path(self):
         return self.cfg.home / "gui.json"
 
-    def _svc_autostart_set(self):
+    def _gui_state(self):
         import json as _json
         try:
-            return set(_json.loads(self._svc_state_path().read_text(encoding="utf-8")).get("autostart", []))
+            return _json.loads(self._svc_state_path().read_text(encoding="utf-8"))
         except Exception:
-            return set()
+            return {}
 
-    def _svc_set_autostart(self, name, on):
+    def _gui_state_save(self, d):
         import json as _json
-        p = self._svc_state_path()
         try:
-            d = _json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            d = {}
-        s = set(d.get("autostart", []))
-        s.add(name) if on else s.discard(name)
-        d["autostart"] = sorted(s)
-        try:
+            p = self._svc_state_path()
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(_json.dumps(d, indent=2), encoding="utf-8")
         except Exception:
             pass
+
+    def _svc_autostart_set(self):
+        return set(self._gui_state().get("autostart", []))
+
+    def _svc_set_autostart(self, name, on):
+        d = self._gui_state()
+        s = set(d.get("autostart", []))
+        s.add(name) if on else s.discard(name)
+        d["autostart"] = sorted(s)
+        self._gui_state_save(d)
         self.set_status(f"{name}: {'will start' if on else 'won’t start'} when PriorStates opens")
+
+    def _svc_opts(self, name):
+        return (self._gui_state().get("options") or {}).get(name, {})
+
+    def _svc_save_opts(self, name):
+        opts = (self._svc_rows.get(name) or {}).get("opts") or {}
+        vals = {}
+        for flag, var in opts.items():
+            try:
+                vals[flag] = var.get()
+            except Exception:
+                pass
+        d = self._gui_state()
+        d.setdefault("options", {})[name] = vals
+        self._gui_state_save(d)
+
+    # ----- account (sign in / out / sync) — no CLI needed --------------- #
+    def _account_status(self):
+        try:
+            from ..core import plugins as _pl
+            return _pl.registry(self.cfg).account_status() or {}
+        except Exception:
+            return {}
+
+    def _render_account(self):
+        tk, ttk = self.tk, self.ttk
+        box = getattr(self, "_acct_box", None)
+        if box is None:
+            return
+        for c in box.winfo_children():
+            c.destroy()
+        st = self._account_status()
+        if not st:                                   # no account-capable edition installed
+            return
+        row = ttk.Frame(box); row.pack(fill="x")
+        if st.get("logged_in"):
+            tk.Label(row, text="👤 " + (st.get("user") or "signed in"), bg=BG, fg=FG,
+                     font=(self._fam(), 10, "bold")).pack(side="left")
+            ttk.Button(row, text="Sign out", command=self._account_signout).pack(side="right")
+            ttk.Button(row, text="Sync now", command=self._account_sync).pack(side="right", padx=6)
+        else:
+            tk.Label(row, text="Not signed in — sign in to use the relay, sync and sharing.",
+                     bg=BG, fg=DIM, font=(self._fam(), 9)).pack(side="left")
+            ttk.Button(row, text="Sign in", command=self._account_signin).pack(side="right")
+            ttk.Button(row, text="Create account", command=self._account_signup).pack(side="right", padx=6)
+
+    def _account_run(self, cmd, ok_msg, fail_msg):
+        self.set_status(ok_msg.replace("✓", "…"))
+
+        def go():
+            return subprocess.run([sys.executable, "-m", "priorstates"] + cmd,
+                                  capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace", creationflags=_CNW)
+
+        def done(r):
+            okay = getattr(r, "returncode", 1) == 0
+            self.set_status(ok_msg if okay else (fail_msg + ((": " + (r.stderr or r.stdout or "").strip().splitlines()[-1]) if not okay and (r.stderr or r.stdout) else "")))
+            self._render_account()
+            self._render_services()
+        self.run_bg(go, done)
+
+    def _account_creds(self, title):
+        from tkinter import simpledialog
+        u = simpledialog.askstring(title, "Username:", parent=self.root)
+        if not u:
+            return None, None
+        p = simpledialog.askstring(title, "Password:", parent=self.root, show="*")
+        if not p:
+            return None, None
+        return u.strip(), p
+
+    def _account_signin(self):
+        u, p = self._account_creds("Sign in")
+        if u:
+            self._account_run(["login", "--user", u, "--password", p], "signed in ✓", "sign in failed")
+
+    def _account_signup(self):
+        u, p = self._account_creds("Create account")
+        if u:
+            self._account_run(["signup", "--user", u, "--password", p], "account created ✓", "sign up failed")
+
+    def _account_signout(self):
+        self._account_run(["logout"], "signed out", "sign out failed")
+
+    def _account_sync(self):
+        self._account_run(["sync"], "memory synced ✓", "sync failed")
 
     def on_close(self):
         # stop every managed connection service (relay, …)
