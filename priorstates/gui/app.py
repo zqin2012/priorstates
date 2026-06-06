@@ -1659,6 +1659,10 @@ class PriorStatesGUI:
                     var = tk.StringVar(value=str(saved.get(flag, o.get("default", "") or "")))
                     ttk.Entry(line, textvariable=var, width=24,
                               show=("*" if o.get("secret") else "")).pack(side="left", padx=6)
+                    if o.get("secret"):
+                        # never display the secret — let the user copy it to the clipboard
+                        ttk.Button(line, text="Copy", width=6,
+                                   command=lambda v=var: self._copy_secret(v)).pack(side="left")
                     if o.get("help"):
                         tk.Label(line, text=o["help"], bg=BG, fg=DIM, font=(self._fam(), 8)).pack(side="left")
                 opts[flag] = var
@@ -1688,7 +1692,7 @@ class PriorStatesGUI:
         specopts = spec.get("options", []) or []
         bool_on = {o["flag"] for o in specopts
                    if o.get("type", "bool") == "bool" and opts.get(o["flag"]) is not None and opts[o["flag"]].get()}
-        notes = []
+        had_secret = False
         for o in specopts:
             flag = o.get("flag")
             var = opts.get(flag)
@@ -1707,7 +1711,7 @@ class PriorStatesGUI:
                 if val:
                     argv += [flag, val]
                     if o.get("secret"):
-                        notes.append(f"{o.get('label', flag)}: {val}")
+                        had_secret = True            # never surface the secret value in the GUI
         self._svc_save_opts(name)
         env = dict(os.environ)
         env["PRIORSTATES_HOME"] = str(self.cfg.home)
@@ -1722,8 +1726,19 @@ class PriorStatesGUI:
         self._svc_proc[name] = p
         r = self._svc_rows.get(name) or {}
         if r.get("note") is not None:
-            r["note"].set(("  •  ".join(notes) + "   (enter this in the browser terminal)") if notes else "")
+            r["note"].set("started — click Copy next to the passphrase, then paste it into the browser terminal"
+                          if had_secret else "")
         self.set_status(f"{spec.get('label', name)} started — keep PriorStates open to stay connected")
+
+    def _copy_secret(self, var):
+        """Copy a secret (e.g. terminal passphrase) to the clipboard without ever
+        displaying it in the GUI."""
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(var.get() or "")
+            self.set_status("passphrase copied to clipboard — paste it into the browser terminal")
+        except Exception:
+            pass
 
     def _svc_stop(self, name):
         p = self._svc_proc.pop(name, None)

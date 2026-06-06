@@ -78,7 +78,8 @@ def test_options_build_argv(monkeypatch):
     assert argv[argv.index("--terminal-cmd") + 1] == "claude"
     pw = argv[argv.index("--terminal-pass") + 1]
     assert len(pw) >= 8                                  # passphrase auto-generated
-    assert pw in g._svc_rows["relay"]["note"].get()      # shown to the user
+    assert pw not in g._svc_rows["relay"]["note"].get()  # never shown in the GUI
+    assert pw == g._svc_rows["relay"]["opts"]["--terminal-pass"].get()  # set in the (masked) field, copyable
 
 
 def test_requires_skips_when_dependency_off(monkeypatch):
