@@ -1625,11 +1625,30 @@ class PriorStatesGUI:
 
     def update_software(self):
         from tkinter import messagebox
+        # If we're running from a system/.deb install, a pip --user upgrade would
+        # install a SECOND copy into ~/.local that *shadows* the .deb (user
+        # site-packages sort ahead on sys.path) — so every later .deb reinstall
+        # silently "does nothing". Steer .deb users to the .deb instead.
+        import priorstates as _pp
+        install_dir = os.path.dirname(os.path.dirname(os.path.abspath(_pp.__file__)))
+        in_venv = sys.prefix != sys.base_prefix          # pip --user is invalid inside a venv/pipx
+        if "dist-packages" in install_dir and not in_venv:
+            messagebox.showinfo("Update PriorStates",
+                                "This is a system package install (.deb).\n\n"
+                                "Download the latest .deb from priorstates.com/download and run:\n"
+                                "    sudo apt install ./priorstates-hub_<ver>_all.deb\n\n"
+                                "(Avoid 'pip install --user' here — it creates a second copy in "
+                                "~/.local that shadows this one, so future .deb updates look like "
+                                "they do nothing.)")
+            try:
+                webbrowser.open("https://priorstates.com/download")
+            except Exception:
+                pass
+            return
         if not messagebox.askyesno("Update PriorStates",
                                     "Reinstall the latest PriorStates from GitHub?\n\n"
                                     "You'll need to restart the app afterward to use the new version."):
             return
-        in_venv = sys.prefix != sys.base_prefix          # pip --user is invalid inside a venv/pipx
         cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", "--upgrade", "--force-reinstall"]
         if not in_venv:
             cmd.append("--user")
