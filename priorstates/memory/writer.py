@@ -230,6 +230,100 @@ def set_pinned(name: str, pinned: bool, *, memory_dir: Path) -> Path | None:
     return existing
 
 
+# --- graph edges ----------------------------------------------------------- #
+EDGE_MIRROR = {
+    "supersedes": "superseded_by", "superseded_by": "supersedes",
+    "contradicts": "contradicts", "corroborates": "corroborates", "relates": "relates",
+}
+
+
+def _split_md(path: Path):
+    parts = Path(path).read_text(encoding="utf-8").split("---\n", 2)
+    if len(parts) < 3:
+        raise MemoryWriteError(f"{path} has no frontmatter")
+    return parts                                            # [pre, fm_text, body]
+
+
+def _write_md(path: Path, parts, fm_lines: list[str]) -> None:
+    new_text = f"{parts[0]}---\n" + "\n".join(fm_lines) + f"\n---\n{parts[2]}"
+    tmp = Path(path).with_suffix(".md.tmp")
+    tmp.write_text(new_text, encoding="utf-8")
+    os.replace(tmp, Path(path))
+
+
+def _edit_list_key(path: Path, key: str, *, add: str | None = None, remove: str | None = None) -> None:
+    """Add/remove a value in an inline-list frontmatter key (`key: [a, b]`), in place.
+    Splits on commas only (edge refs / evidence contain ':' and '/')."""
+    parts = _split_md(path)
+    out, cur, idx = [], [], None
+    for line in parts[1].splitlines():
+        if line.startswith(key + ":") and not line.startswith((" ", "\t")):
+            v = line.split(":", 1)[1].strip()
+            if v.startswith("[") and v.endswith("]"):
+                v = v[1:-1]
+            cur = [p.strip().strip("\"'") for p in v.split(",") if p.strip()]
+            idx = len(out)
+            out.append(None)
+        else:
+            out.append(line)
+    if add and add not in cur:
+        cur.append(add)
+    if remove:
+        cur = [c for c in cur if c != remove]
+    new_line = f"{key}: [{', '.join(cur)}]" if cur else None
+    if idx is not None:
+        out.pop(idx) if new_line is None else out.__setitem__(idx, new_line)
+    elif new_line is not None:
+        out.append(new_line)
+    _write_md(path, parts, out)
+
+
+def _set_scalar_key(path: Path, key: str, value: str) -> None:
+    parts = _split_md(path)
+    out, saw = [], False
+    for line in parts[1].splitlines():
+        if line.startswith(key + ":") and not line.startswith((" ", "\t")):
+            saw = True
+            out.append(f"{key}: {value}")
+        else:
+            out.append(line)
+    if not saw:
+        out.append(f"{key}: {value}")
+    _write_md(path, parts, out)
+
+
+def add_edge(name: str, kind: str, target: str, *, memory_dir: Path,
+             condition: str | None = None, remove: bool = False):
+    """Add (or remove) a graph edge between two claims, writing the mirror edge on
+    the other side too. `target` may be a claim name or a claim id. Returns
+    ``(src_path, target_path|None)`` or ``None`` if the source/target can't be found.
+    """
+    if kind not in EDGE_MIRROR:
+        raise MemoryWriteError(f"unknown edge kind {kind!r}; valid: {sorted(EDGE_MIRROR)}")
+    memory_dir = Path(memory_dir)
+    src = find_existing_by_name(memory_dir, name)
+    if src is None:
+        return None
+    tpath = find_existing_by_name(memory_dir, target)
+    # ensure both have ids (so edges reference the stable id, not the slug)
+    ensure_claim_fields(src)
+    if tpath:
+        ensure_claim_fields(tpath)
+    src_id = _frontmatter_value(src, "id")
+    target_id = _frontmatter_value(tpath, "id") if tpath else (target if target.startswith("cl_") else None)
+    if not target_id:
+        return None
+    mirror = EDGE_MIRROR[kind]
+    _edit_list_key(src, kind, **({"remove": target_id} if remove else {"add": target_id}))
+    if tpath and src_id:
+        _edit_list_key(tpath, mirror, **({"remove": src_id} if remove else {"add": src_id}))
+    if condition and not remove:
+        _set_scalar_key(src, "condition", f'"{condition}"')
+        if tpath:
+            _set_scalar_key(tpath, "condition", f'"{condition}"')
+    return (str(src), str(tpath) if tpath else None)
+
+
 def parse_tags(value: str | None) -> list[str]:
     """Parse a frontmatter ``tags:`` value into a list.
 

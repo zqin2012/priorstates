@@ -37,6 +37,7 @@ FLAG_SUPERSEDED = 1 << 1
 FLAG_CONTRADICTED = 1 << 2
 FLAG_STALE = 1 << 3          # past valid_until
 FLAG_FLAGGED = 1 << 4        # injection-scan flagged
+FLAG_HAS_EDGES = 1 << 5      # has any graph edge — gates the recall post-rank pass
 
 # Core type codes are stable; plugin-defined types should use codes >= 64.
 TYPE_CODES = {

@@ -139,15 +139,28 @@ def cmd_memory(args):
     cfg = load_config()
     if args.action == "add":
         body = args.body or sys.stdin.read()
-        _print(mem.add_memory(cfg, name=args.name, type_str=args.type,
-                              description=args.description or "", body=body,
-                              pinned=args.pin, scope=args.scope, overwrite=args.overwrite,
-                              tags=getattr(args, "tag", None),
-                              evidence=getattr(args, "evidence", None),
-                              as_of=getattr(args, "as_of", None),
-                              valid_until=getattr(args, "valid_until", None),
-                              confidence=getattr(args, "confidence", None),
-                              source=getattr(args, "source", None)))
+        res = mem.add_memory(cfg, name=args.name, type_str=args.type,
+                             description=args.description or "", body=body,
+                             pinned=args.pin, scope=args.scope, overwrite=args.overwrite,
+                             tags=getattr(args, "tag", None),
+                             evidence=getattr(args, "evidence", None),
+                             as_of=getattr(args, "as_of", None),
+                             valid_until=getattr(args, "valid_until", None),
+                             confidence=getattr(args, "confidence", None),
+                             source=getattr(args, "source", None))
+        _print(res)
+        dups = mem.find_near_dups(cfg, name=args.name, scope=res.get("scope", "all"))
+        if dups:
+            top = dups[0]
+            od = getattr(args, "on_dup", None)
+            kmap = {"s": "supersedes", "c": "contradicts", "o": "corroborates", "r": "relates"}
+            if od in kmap:
+                mem.link_memory(cfg, args.name, kmap[od], top["name"], scope=res.get("scope", "all"))
+                print(f"  ↳ linked {kmap[od]} → {top['name']!r}")
+            elif od != "k":
+                print(f"  ⚠ near-duplicate (top {top['score']:+.3f}: {top['name']!r}). Link with: "
+                      f"priorstates memory link {args.name!r} {top['name']!r} "
+                      f"--supersedes|--contradicts|--corroborates|--relates")
     elif args.action == "show":
         res = mem.show_memory(cfg, args.name, scope=args.scope)
         if not res:
@@ -166,6 +179,29 @@ def cmd_memory(args):
         if fm.get("tags"):
             print(f"tags:       {fm['tags']}")
         print(f"path:       {res['path']}")
+    elif args.action in ("link", "unlink"):
+        kind = getattr(args, "kind", None)
+        if not kind:
+            print("specify one edge: --supersedes|--contradicts|--corroborates|--relates",
+                  file=sys.stderr); sys.exit(2)
+        res = mem.link_memory(cfg, args.name, kind, args.target, scope=args.scope,
+                              condition=getattr(args, "condition", None),
+                              remove=(args.action == "unlink"))
+        if not res:
+            print(f"could not {args.action}: check both {args.name!r} and {args.target!r} exist",
+                  file=sys.stderr); sys.exit(1)
+        arrow = "⊘" if args.action == "unlink" else "→"
+        print(f"{args.action}ed: {args.name!r} --{kind}--{arrow} {args.target!r}  (scope {res['scope']})")
+    elif args.action == "dups":
+        if not args.name:
+            print("usage: priorstates memory dups <name>  (near-duplicates of a claim)",
+                  file=sys.stderr); sys.exit(2)
+        rows = mem.find_near_dups(cfg, name=args.name, scope=args.scope,
+                                  threshold=getattr(args, "threshold", None))
+        if not rows:
+            print("no near-duplicates above threshold")
+        for r in rows:
+            print(f"{r['score']:+.3f}  {r['name']}")
     elif args.action == "tag":
         res = mem.tag_memory(cfg, args.name, args.tags, scope=args.scope, remove=args.remove)
         if not res["changed"]:
@@ -183,6 +219,7 @@ def cmd_memory(args):
             if r.get("superseded"): flags.append("⤳superseded")
             if r.get("contradicted"): flags.append("⚔contradicted")
             if r.get("flagged"): flags.append("⚑flagged")
+            if r.get("corroboration_count"): flags.append(f"✓×{r['corroboration_count']}")
             meta = "" if no_trust else f"   trust {r.get('trust', 1):.2f}·fresh {r.get('fresh', 1):.2f}"
             tail = ("  " + " ".join(flags)) if flags else ""
             print(f"{r['score']:+.3f}  [{r['type']}]{' 📌' if r['pinned'] else ''}  {r['name']}{meta}{tail}")
@@ -995,8 +1032,28 @@ def build_parser():
     a.add_argument("--valid-until", dest="valid_until", metavar="DATE", help="claim goes stale after this date")
     a.add_argument("--confidence", type=float, metavar="X", help="explicit confidence 0..1")
     a.add_argument("--source", help="provenance origin (default: local)")
+    a.add_argument("--on-dup", dest="on_dup", choices=["s", "c", "o", "r", "k"],
+                   help="if a near-duplicate exists, auto-link to it: s=supersedes c=contradicts "
+                        "o=corroborates r=relates k=keep-both")
     a = pms.add_parser("show", help="show a memory's claim fields (id, as_of, evidence, edges)")
     a.add_argument("name"); a.add_argument("--scope", default="all")
+    a = pms.add_parser("link", help="add a graph edge between two claims (writes the mirror too)")
+    a.add_argument("name"); a.add_argument("target", help="the other claim (name or id)")
+    a.add_argument("--supersedes", action="store_const", const="supersedes", dest="kind")
+    a.add_argument("--contradicts", action="store_const", const="contradicts", dest="kind")
+    a.add_argument("--corroborates", action="store_const", const="corroborates", dest="kind")
+    a.add_argument("--relates", action="store_const", const="relates", dest="kind")
+    a.add_argument("--condition"); a.add_argument("--scope", default="all")
+    a = pms.add_parser("unlink", help="remove a graph edge between two claims")
+    a.add_argument("name"); a.add_argument("target")
+    a.add_argument("--supersedes", action="store_const", const="supersedes", dest="kind")
+    a.add_argument("--contradicts", action="store_const", const="contradicts", dest="kind")
+    a.add_argument("--corroborates", action="store_const", const="corroborates", dest="kind")
+    a.add_argument("--relates", action="store_const", const="relates", dest="kind")
+    a.add_argument("--scope", default="all")
+    a = pms.add_parser("dups", help="list near-duplicate claims (of NAME, or scan all)")
+    a.add_argument("name", nargs="?"); a.add_argument("--threshold", type=float)
+    a.add_argument("--scope", default="all")
     a = pms.add_parser("tag", help="add/remove governance tags on an existing memory")
     a.add_argument("name"); a.add_argument("tags", nargs="+", metavar="TAG")
     a.add_argument("--remove", action="store_true", help="remove the given tags instead of adding")

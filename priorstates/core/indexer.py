@@ -19,9 +19,11 @@ import numpy as np
 
 from .format import (
     DTYPE_F16, DTYPE_F32, ENTRY_SIZE, FLAG_CONTRADICTED, FLAG_EMBED_NORMALIZED,
-    FLAG_FLAGGED, FLAG_PINNED, FLAG_STALE, FLAG_SUPERSEDED,
+    FLAG_FLAGGED, FLAG_HAS_EDGES, FLAG_PINNED, FLAG_STALE, FLAG_SUPERSEDED,
     HEADER_SIZE, Header, IndexEntry, TYPE_CODES, align_up,
 )
+
+EDGE_KINDS = ("supersedes", "superseded_by", "contradicts", "corroborates", "relates")
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 SKIP_NAMES = {"MEMORY.md", "INDEX.md", "README.md"}
@@ -44,6 +46,7 @@ class MemoryRecord:
     contradicted: bool = False
     stale: bool = False
     flagged: bool = False
+    has_edges: bool = False
 
 
 def _parse_list(v: str | None) -> list[str]:
@@ -149,6 +152,7 @@ def _read_memory(path: Path) -> MemoryRecord | None:
         contradicted=bool(_parse_list(fm.get("contradicts"))),
         stale=bool(valid_until_unix) and valid_until_unix < time.time(),
         flagged=(scan == "flagged"),
+        has_edges=any(_parse_list(fm.get(k)) for k in EDGE_KINDS),
     )
 
 
@@ -226,6 +230,8 @@ def build_binary(records: list[MemoryRecord], embeddings: np.ndarray, out_path: 
             flags |= FLAG_STALE
         if rec.flagged:
             flags |= FLAG_FLAGGED
+        if rec.has_edges:
+            flags |= FLAG_HAS_EDGES
         entries.append(IndexEntry(
             name_off=name_off, name_len=name_len, desc_off=desc_off, desc_len=desc_len,
             body_off=body_off, body_len=len(body_bytes), src_path_off=src_off, src_path_len=src_len,

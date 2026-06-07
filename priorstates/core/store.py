@@ -13,8 +13,8 @@ from pathlib import Path
 import numpy as np
 
 from .format import (
-    DTYPE_F16, DTYPE_F32, ENTRY_SIZE, FLAG_CONTRADICTED, FLAG_FLAGGED, FLAG_PINNED,
-    FLAG_STALE, FLAG_SUPERSEDED, HEADER_SIZE,
+    DTYPE_F16, DTYPE_F32, ENTRY_SIZE, FLAG_CONTRADICTED, FLAG_FLAGGED, FLAG_HAS_EDGES,
+    FLAG_PINNED, FLAG_STALE, FLAG_SUPERSEDED, HEADER_SIZE,
     Header, IndexEntry, TYPE_CODES, TYPE_NAMES,
 )
 
@@ -35,6 +35,7 @@ class Hit:
     superseded: bool = False
     contradicted: bool = False
     flagged: bool = False
+    has_edges: bool = False
 
 
 class MemoryStore:
@@ -115,6 +116,7 @@ class MemoryStore:
             trust=float(e.confidence), fresh=float(fresh),
             stale=bool(e.flags & FLAG_STALE), superseded=bool(e.flags & FLAG_SUPERSEDED),
             contradicted=bool(e.flags & FLAG_CONTRADICTED), flagged=bool(e.flags & FLAG_FLAGGED),
+            has_edges=bool(e.flags & FLAG_HAS_EDGES),
         )
 
     def _freshness(self, halflife_days: float | None) -> np.ndarray:
