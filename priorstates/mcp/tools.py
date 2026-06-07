@@ -12,7 +12,7 @@ from ..memory import api as mem
 
 # Recall-only tools — the safe default for the relay (a web app can READ your
 # memory but not modify it). Writes are opt-in (`--allow-write`).
-READ_TOOLS = ("memory_search", "memory_get", "memory_list_pinned", "journal_search")
+READ_TOOLS = ("memory_search", "memory_get", "memory_list_pinned", "journal_search", "memory_answer")
 WRITE_TOOLS = ("memory_add", "journal_add")
 ALL_TOOLS = READ_TOOLS + WRITE_TOOLS
 
@@ -31,6 +31,24 @@ def call(cfg, name: str, args: dict | None):
         return J.search(cfg, topic=a.get("topic"), outcome=a.get("outcome"),
                         tag=a.get("tag"), since=a.get("since"), until=a.get("until"),
                         query=a.get("query"), k=a.get("k", 20))
+    if name == "memory_answer":
+        # Search this machine's memory + journal, then synthesize an answer with the
+        # locally-configured AI (set in the desktop app). Returns hits either way so
+        # the caller can show sources even when no AI is configured.
+        from ..core import ai as _ai
+        q = a["query"]
+        mems = mem.search_memory(cfg, q, k=a.get("k", 8), scope=a.get("scope", "all"))
+        jr = J.search(cfg, query=q, k=a.get("k_journal", 4))
+        out = {"memories": mems, "journal": jr}
+        if not _ai.configured(cfg):
+            out["answer_error"] = ("No AI is configured on this machine — open the PriorStates "
+                                   "desktop app → Connections → AI to set one.")
+            return out
+        try:
+            out["answer"] = _ai.answer(cfg, q, _ai.build_context(mems, jr))
+        except Exception as e:
+            out["answer_error"] = f"AI call failed: {e}"
+        return out
     if name == "memory_add":
         return mem.add_memory(cfg, name=a["name"], type_str=a["type"],
                               description=a.get("description", ""), body=a["body"],

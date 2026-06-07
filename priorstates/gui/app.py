@@ -1587,8 +1587,10 @@ class PriorStatesGUI:
         self._svc_proc = {}        # name -> Popen
         self._svc_rows = {}        # name -> {status, btn, spec, auto, opts, note}
         self._acct_box = ttk.Frame(f); self._acct_box.pack(fill="x", padx=16, pady=(10, 2))
+        self._ai_box = ttk.Frame(f); self._ai_box.pack(fill="x", padx=16, pady=(8, 2))
         self._svc_box = ttk.Frame(f); self._svc_box.pack(fill="both", expand=True, padx=16, pady=8)
         self._render_account()
+        self._render_ai()
         self._render_services()
         # auto-start flagged services, then begin the status poll loop
         auto = self._svc_autostart_set()
@@ -1853,6 +1855,55 @@ class PriorStatesGUI:
             return _pl.registry(self.cfg).account_status() or {}
         except Exception:
             return {}
+
+    def _render_ai(self):
+        """AI used by 'Chat with your memory' — runs on THIS machine; key stays local."""
+        tk, ttk = self.tk, self.ttk
+        box = getattr(self, "_ai_box", None)
+        if box is None:
+            return
+        for c in box.winfo_children():
+            c.destroy()
+        try:
+            from ..core import ai as _ai
+            cur = _ai.load_ai(self.cfg)
+        except Exception:
+            cur = {}
+        tk.Label(box, text="AI for chat answers", bg=BG, fg=FG,
+                 font=(self._fam(), 10, "bold")).pack(anchor="w")
+        tk.Label(box, text=("Used by 'Chat with your memory'. The answer is generated on THIS "
+                            "machine — your API key never leaves it."),
+                 bg=BG, fg=DIM, wraplength=780, justify="left", font=(self._fam(), 9)).pack(anchor="w", pady=(1, 4))
+        prov = tk.StringVar(value=(cur.get("provider") or "(off)"))
+        line = ttk.Frame(box); line.pack(anchor="w", fill="x")
+        tk.Label(line, text="Provider:", bg=BG, fg=DIM, font=(self._fam(), 9)).pack(side="left")
+        ttk.Combobox(line, textvariable=prov, width=14, state="readonly",
+                     values=["(off)", "anthropic", "openai", "ollama", "claude_cli"]).pack(side="left", padx=6)
+
+        def _field(label, key, secret=False):
+            ln = ttk.Frame(box); ln.pack(anchor="w", fill="x", pady=(4, 0))
+            tk.Label(ln, text=label + ":", bg=BG, fg=DIM, font=(self._fam(), 9)).pack(side="left")
+            v = tk.StringVar(value=str(cur.get(key, "") or ""))
+            ttk.Entry(ln, textvariable=v, width=30, show=("*" if secret else "")).pack(side="left", padx=6)
+            return v
+        model = _field("Model (optional)", "model")
+        apikey = _field("API key (anthropic/openai)", "api_key", secret=True)
+        baseurl = _field("Base URL (ollama/openai-compat)", "base_url")
+        note = tk.StringVar(value="")
+        tk.Label(box, textvariable=note, bg=BG, fg="#3fb950", font=(self._fam(), 9)).pack(anchor="w", pady=(4, 0))
+
+        def _save():
+            p = prov.get()
+            d = ({} if p in ("", "(off)") else
+                 {"provider": p, "model": model.get().strip(),
+                  "api_key": apikey.get().strip(), "base_url": baseurl.get().strip()})
+            try:
+                from ..core import ai as _ai
+                _ai.save_ai(self.cfg, d)
+                note.set("Saved — chat answers now use this machine's AI." if d else "AI disabled.")
+            except Exception as e:
+                note.set(f"Error: {e}")
+        ttk.Button(box, text="Save AI settings", command=_save).pack(anchor="w", pady=(6, 0))
 
     def _render_account(self):
         tk, ttk = self.tk, self.ttk
