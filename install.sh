@@ -2,11 +2,10 @@
 # PriorStates installer. Installs the package, initializes data dirs, and wires
 # the MCP server + pinned block into every detected AI agent (install-and-forget).
 #
-#   ./install.sh                     # install + init + wire all detected agents
-#   ./install.sh --extras            # also install onnx + mcp + pandas extras
-#   ./install.sh --model             # also download the semantic embedding model
+#   ./install.sh                     # install + wire agents + semantic recall (default)
+#   ./install.sh --lite              # skip the onnx libs + 127MB model (hashing recall)
+#   ./install.sh --extras            # everything incl. pandas/jupyter extras
 #   ./install.sh --no-wire           # skip agent wiring
-#   ./install.sh --extras --model    # the works
 #
 # Also works without a checkout (installs the released package from PyPI):
 #   curl -fsSL https://priorstates.com/install.sh | sh
@@ -22,33 +21,35 @@ if [ -n "$HERE" ] && [ -f "$HERE/pyproject.toml" ] && \
   cd "$HERE"
 fi
 
-EXTRAS=0; MODEL=0; WIRE=1
+# Defaults: agents wired + MCP tools + semantic recall (install-and-forget).
+# --lite drops the onnx inference libs and the 127MB model (hashing recall —
+# everything still works, recall is just keyword-ish instead of by meaning).
+EXTRAS=0; MODEL=1; WIRE=1; EXTRA_SPEC="[mcp,onnx]"
 for a in "$@"; do
   case "$a" in
-    --extras)  EXTRAS=1 ;;
-    --model)   MODEL=1 ;;
-    --wire)    WIRE=1 ;;   # legacy no-op (wiring is the default now)
-    --no-wire) WIRE=0 ;;
+    --extras)   EXTRAS=1 ;;
+    --lite|--no-model) MODEL=0; EXTRA_SPEC="[mcp]" ;;
+    --model)    MODEL=1 ;;   # legacy no-op (model is the default now)
+    --wire)     WIRE=1 ;;    # legacy no-op (wiring is the default now)
+    --no-wire)  WIRE=0 ;;
     *) echo "unknown flag: $a"; exit 2 ;;
   esac
 done
+[ "$EXTRAS" = 1 ] && EXTRA_SPEC="[full]"
 
 PY="${PYTHON:-python3}"
 if [ "$LOCAL_TREE" = 1 ]; then
-  SPEC="."
-  [ "$EXTRAS" = 1 ] && SPEC=".[full]"
+  SPEC=".$EXTRA_SPEC"
 else
   # No source checkout (curl | sh): install the published package from PyPI.
   # Set PRIORSTATES_REPO to a git URL to install from a repo instead.
   if [ -n "${PRIORSTATES_REPO:-}" ]; then
     echo "==> no source checkout detected; installing from $PRIORSTATES_REPO"
-    SPEC="priorstates @ git+$PRIORSTATES_REPO"
-    [ "$EXTRAS" = 1 ] && SPEC="priorstates[full] @ git+$PRIORSTATES_REPO"
+    SPEC="priorstates$EXTRA_SPEC @ git+$PRIORSTATES_REPO"
     command -v git >/dev/null 2>&1 || { echo "ERROR: git is required (pip installs from the git repo)"; exit 1; }
   else
     echo "==> no source checkout detected; installing from PyPI"
-    SPEC="priorstates"
-    [ "$EXTRAS" = 1 ] && SPEC="priorstates[full]"
+    SPEC="priorstates$EXTRA_SPEC"
   fi
 fi
 
@@ -64,17 +65,36 @@ echo "==> ensuring modern build tooling"
 
 echo "==> installing priorstates ($SPEC)"
 if command -v pipx >/dev/null 2>&1; then
-  if [ "$LOCAL_TREE" = 1 ]; then pipx install --force "$HERE"; else pipx install --force "git+$REPO_URL"; fi
-  [ "$EXTRAS" = 1 ] && pipx inject priorstates onnxruntime tokenizers mcp pyyaml pandas jupyter_client ipykernel || true
+  if [ "$LOCAL_TREE" = 1 ]; then
+    pipx install --force "$HERE"
+  elif [ -n "${PRIORSTATES_REPO:-}" ]; then
+    pipx install --force "git+$PRIORSTATES_REPO"
+  else
+    pipx install --force priorstates
+  fi
+  case "$EXTRA_SPEC" in
+    "[full]")     pipx inject priorstates onnxruntime tokenizers mcp pyyaml pandas jupyter_client ipykernel || true ;;
+    "[mcp,onnx]") pipx inject priorstates onnxruntime tokenizers mcp || true ;;
+    *)            pipx inject priorstates mcp || true ;;
+  esac
 else
   echo "    (pipx not found; using pip --user)"
-  if [ "$LOCAL_TREE" = 1 ]; then
-    # --no-cache-dir: a source-tree version is static, so pip would otherwise reuse
-    # a stale cached wheel from a previous commit and "update" to old code.
-    "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$SPEC"
-  else
-    # git installs carry a static version too -> same stale-cache hazard.
-    "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$SPEC"
+  # --no-cache-dir: source-tree/git versions are static, so pip would otherwise
+  # reuse a stale cached wheel from a previous commit and "update" to old code.
+  if ! "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$SPEC"; then
+    # onnxruntime has no wheel on some platform/Python combos — fall back to the
+    # lite install (hashing recall) rather than failing the whole setup.
+    case "$EXTRA_SPEC" in
+      "[mcp]") exit 1 ;;
+      *)
+        echo "!! install with inference extras failed — retrying lite (hashing recall)"
+        MODEL=0
+        if [ "$LOCAL_TREE" = 1 ]; then LSPEC=".[mcp]"
+        elif [ -n "${PRIORSTATES_REPO:-}" ]; then LSPEC="priorstates[mcp] @ git+$PRIORSTATES_REPO"
+        else LSPEC="priorstates[mcp]"; fi
+        "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$LSPEC"
+        ;;
+    esac
   fi
 fi
 
@@ -104,8 +124,10 @@ else
 fi
 
 if [ "$MODEL" = 1 ]; then
-  echo "==> downloading embedding model"
-  $PM init --download-model --no-wire
+  echo "==> downloading the semantic-recall model (~127 MB; skip with --lite)"
+  # Non-fatal: on failure the hashing embedder keeps working; re-run
+  # `priorstates init --download-model` any time.
+  $PM init --download-model --no-wire || true
 fi
 
 # Desktop/app-menu launcher for the GUI (Linux: writes a .desktop + a Desktop

@@ -190,8 +190,10 @@ command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t 
 cat <<'MSG'
 
 PriorStates installed.  Quick start (as your normal user, not root):
-  python3 -m pip install --user mcp   # agent (MCP) tool support
+  python3 -m pip install --user mcp onnxruntime tokenizers
+                                 # agent (MCP) tools + semantic recall libs
   priorstates init               # wire every detected AI agent (once)
+  priorstates init --download-model   # semantic recall (~127 MB, local)
   priorstates doctor             # status — which agents are wired
   priorstates cockpit            # local web cockpit
   priorstates-gui                # desktop control panel

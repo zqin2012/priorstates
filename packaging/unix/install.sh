@@ -6,7 +6,8 @@
 # pip. Only numpy is fetched from PyPI (one-time network), unless you bundled
 # it too. By default it then wires every detected AI agent (install-and-forget).
 #
-#   ./install.sh                # install / upgrade + wire detected agents
+#   ./install.sh                # install / upgrade + wire agents + semantic recall
+#   ./install.sh --lite         # skip the onnx libs + 127MB model (hashing recall)
 #   ./install.sh --no-wire      # install but skip agent wiring
 #   ./install.sh --uninstall    # remove
 set -euo pipefail
@@ -18,10 +19,11 @@ BIN="$HOME/.local/bin"
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICONS="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
 
-WIRE=1
+WIRE=1; MODEL=1
 for a in "$@"; do
   case "$a" in
     --no-wire) WIRE=0 ;;
+    --lite|--no-model) MODEL=0 ;;
     --uninstall)
       rm -rf "$VENV" "$DATA"
       rm -f "$BIN/priorstates" "$BIN/priorstates-gui" \
@@ -57,12 +59,23 @@ else
   PIP="$PY -m pip"; TARGET_BIN="$HOME/.local/bin"
 fi
 
-# ---- install the bundled wheel (numpy + mcp from PyPI) ---------------------
-# The [mcp] extra is what lets agents reach the tools — without it the install
-# is not "install-and-forget", so it ships by default.
+# ---- install the bundled wheel (numpy + mcp + onnx from PyPI) --------------
+# [mcp] lets agents reach the tools; [onnx] powers semantic recall — without
+# them the install is not "install-and-forget", so both ship by default.
+# onnxruntime lacks wheels on some platforms → fall back to lite (hashing).
 echo "==> installing PriorStates (from bundled wheels)"
-# shellcheck disable=SC2086
-$PIP install -q --upgrade --find-links "$WHEELS" "priorstates[mcp]"
+if [ "$MODEL" = 1 ]; then
+  # shellcheck disable=SC2086
+  $PIP install -q --upgrade --find-links "$WHEELS" "priorstates[mcp,onnx]" || {
+    echo "!! inference extras failed — retrying lite (hashing recall)"
+    MODEL=0
+    # shellcheck disable=SC2086
+    $PIP install -q --upgrade --find-links "$WHEELS" "priorstates[mcp]"
+  }
+else
+  # shellcheck disable=SC2086
+  $PIP install -q --upgrade --find-links "$WHEELS" "priorstates[mcp]"
+fi
 
 # ---- launchers in ~/.local/bin --------------------------------------------
 cat > "$BIN/priorstates" <<SH
@@ -113,6 +126,14 @@ if [ "$WIRE" = 1 ]; then
 else
   echo "==> initializing (agent wiring skipped: --no-wire)"
   "$TARGET_BIN/priorstates" init --no-wire || true
+fi
+
+# ---- semantic-recall model (default; skip with --lite) ----------------------
+if [ "$MODEL" = 1 ]; then
+  echo "==> downloading the semantic-recall model (~127 MB; skip with --lite)"
+  # Non-fatal: hashing recall keeps working; re-run `priorstates init
+  # --download-model` any time.
+  "$TARGET_BIN/priorstates" init --download-model --no-wire || true
 fi
 
 cat <<MSG
