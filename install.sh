@@ -7,9 +7,20 @@
 #   ./install.sh --model             # also download the semantic embedding model
 #   ./install.sh --no-wire           # skip agent wiring
 #   ./install.sh --extras --model    # the works
+#
+# Also works without a checkout (installs the released package from PyPI):
+#   curl -fsSL https://priorstates.com/install.sh | sh
 set -euo pipefail
-cd "$(dirname "$0")"
-HERE="$(pwd)"
+
+# Detect whether we're running inside a checkout (./install.sh) or piped from
+# curl (no source tree -> install from PyPI).
+HERE="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
+LOCAL_TREE=0
+if [ -n "$HERE" ] && [ -f "$HERE/pyproject.toml" ] && \
+   grep -q '^name = "priorstates"' "$HERE/pyproject.toml" 2>/dev/null; then
+  LOCAL_TREE=1
+  cd "$HERE"
+fi
 
 EXTRAS=0; MODEL=0; WIRE=1
 for a in "$@"; do
@@ -23,8 +34,16 @@ for a in "$@"; do
 done
 
 PY="${PYTHON:-python3}"
-SPEC="."
-[ "$EXTRAS" = 1 ] && SPEC=".[full]"
+if [ "$LOCAL_TREE" = 1 ]; then
+  SPEC="."
+  [ "$EXTRAS" = 1 ] && SPEC=".[full]"
+else
+  echo "==> no source checkout detected; installing from GitHub"
+  REPO_URL="${PRIORSTATES_REPO:-https://github.com/zqin2012/priorstates.git}"
+  SPEC="priorstates @ git+$REPO_URL"
+  [ "$EXTRAS" = 1 ] && SPEC="priorstates[full] @ git+$REPO_URL"
+  command -v git >/dev/null 2>&1 || { echo "ERROR: git is required (pip installs from the git repo)"; exit 1; }
+fi
 
 # A pre-PEP621 setuptools silently builds an empty "UNKNOWN-0.0.0" wheel. Make
 # sure the build front-end has a modern setuptools/wheel before we build.
@@ -38,13 +57,18 @@ echo "==> ensuring modern build tooling"
 
 echo "==> installing priorstates ($SPEC)"
 if command -v pipx >/dev/null 2>&1; then
-  pipx install --force "$HERE"
+  if [ "$LOCAL_TREE" = 1 ]; then pipx install --force "$HERE"; else pipx install --force "git+$REPO_URL"; fi
   [ "$EXTRAS" = 1 ] && pipx inject priorstates onnxruntime tokenizers mcp pyyaml pandas jupyter_client ipykernel || true
 else
   echo "    (pipx not found; using pip --user)"
-  # --no-cache-dir: the version is static (0.1.0), so pip would otherwise reuse a
-  # stale cached wheel from a previous commit and "update" to old code.
-  "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$SPEC"
+  if [ "$LOCAL_TREE" = 1 ]; then
+    # --no-cache-dir: a source-tree version is static, so pip would otherwise reuse
+    # a stale cached wheel from a previous commit and "update" to old code.
+    "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$SPEC"
+  else
+    # git installs carry a static version too -> same stale-cache hazard.
+    "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$SPEC"
+  fi
 fi
 
 # Verify the build actually produced the priorstates package (not UNKNOWN).
@@ -54,8 +78,10 @@ if ! "$PY" -c "import priorstates" >/dev/null 2>&1; then
   echo "       'UNKNOWN' package). Upgrade and retry:"
   echo "         $PY -m pip install --user --upgrade pip setuptools wheel"
   echo "         $PY -m pip install --user --force-reinstall '$SPEC'"
-  echo "       Meanwhile you can run everything from this folder with:"
-  echo "         cd $HERE && $PY -m priorstates <command>"
+  if [ "$LOCAL_TREE" = 1 ]; then
+    echo "       Meanwhile you can run everything from this folder with:"
+    echo "         cd $HERE && $PY -m priorstates <command>"
+  fi
   exit 1
 fi
 
