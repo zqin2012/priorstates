@@ -38,11 +38,18 @@ if [ "$LOCAL_TREE" = 1 ]; then
   SPEC="."
   [ "$EXTRAS" = 1 ] && SPEC=".[full]"
 else
-  echo "==> no source checkout detected; installing from GitHub"
-  REPO_URL="${PRIORSTATES_REPO:-https://github.com/zqin2012/priorstates.git}"
-  SPEC="priorstates @ git+$REPO_URL"
-  [ "$EXTRAS" = 1 ] && SPEC="priorstates[full] @ git+$REPO_URL"
-  command -v git >/dev/null 2>&1 || { echo "ERROR: git is required (pip installs from the git repo)"; exit 1; }
+  # No source checkout (curl | sh): install the published package from PyPI.
+  # Set PRIORSTATES_REPO to a git URL to install from a repo instead.
+  if [ -n "${PRIORSTATES_REPO:-}" ]; then
+    echo "==> no source checkout detected; installing from $PRIORSTATES_REPO"
+    SPEC="priorstates @ git+$PRIORSTATES_REPO"
+    [ "$EXTRAS" = 1 ] && SPEC="priorstates[full] @ git+$PRIORSTATES_REPO"
+    command -v git >/dev/null 2>&1 || { echo "ERROR: git is required (pip installs from the git repo)"; exit 1; }
+  else
+    echo "==> no source checkout detected; installing from PyPI"
+    SPEC="priorstates"
+    [ "$EXTRAS" = 1 ] && SPEC="priorstates[full]"
+  fi
 fi
 
 # A pre-PEP621 setuptools silently builds an empty "UNKNOWN-0.0.0" wheel. Make
