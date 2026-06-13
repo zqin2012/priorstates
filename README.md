@@ -50,7 +50,7 @@ Then just **open “PriorStates” from your application menu** (or run
 `priorstates-gui`). The desktop control panel does the rest — initialize your
 memory, wire Claude / Codex / Gemini over MCP, and launch the cockpit, all with a
 click. No further commands needed. (For agent integration it needs the MCP support
-package once — `pip3 install --user mcp`; the app flags it if it's missing.)
+package once — `PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --user mcp`; the app flags it if it's missing.)
 
 `sudo apt remove priorstates` uninstalls. Re-running the same `apt install`
 upgrades in place.
@@ -69,7 +69,7 @@ Start Menu + Desktop shortcuts. Nothing else required.
 <summary><b>🍎 macOS / any OS with Python 3.10+ — pip</b></summary>
 
 ```bash
-pip install --user --no-cache-dir "priorstates @ git+https://github.com/zqin2012/priorstates.git"
+PIP_BREAK_SYSTEM_PACKAGES=1 pip install --user --no-cache-dir "priorstates @ git+https://github.com/zqin2012/priorstates.git"
 priorstates init            # create ~/.priorstates + per-project .priorstates/
 priorstates agents install  # wire Claude / Codex / Gemini over MCP
 priorstates cockpit         # open the web cockpit → http://127.0.0.1:7700

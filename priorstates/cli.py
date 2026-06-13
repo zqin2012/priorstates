@@ -155,7 +155,11 @@ def cmd_memory(args):
     from .memory import api as mem
     cfg = load_config()
     if args.action == "add":
-        body = args.body or sys.stdin.read()
+        body = args.body
+        if body is None and not sys.stdin.isatty():
+            body = sys.stdin.read()
+        if not (body or "").strip():
+            raise SystemExit('memory add: provide the memory text via --body "..." or piped stdin')
         res = mem.add_memory(cfg, name=args.name, type_str=args.type,
                              description=args.description or "", body=body,
                              pinned=args.pin, scope=args.scope, overwrite=args.overwrite,
@@ -1067,6 +1071,12 @@ def cmd_install_launcher(args):
 # --------------------------------------------------------------------------- #
 def build_parser():
     p = argparse.ArgumentParser("priorstates", description="PriorStates — shared memory & research journal for your AI agents (memory + journal + cockpit + mdlab).")
+    try:
+        from importlib.metadata import version as _pkg_version
+        _ver = _pkg_version("priorstates")
+    except Exception:
+        _ver = "unknown"
+    p.add_argument("--version", action="version", version=f"priorstates {_ver}")
     p.add_argument("--area", "-A", metavar="NAME",
                    help="use the named area (core-dev, strategy, ops, audit, …) instead of the default store")
     p.add_argument("--workspace", "-W", metavar="NAME", help=argparse.SUPPRESS)  # deprecated alias for --area

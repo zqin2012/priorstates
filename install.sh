@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # PriorStates installer. Installs the package, initializes data dirs, and wires
 # the MCP server + pinned block into every detected AI agent (install-and-forget).
 #
@@ -9,7 +9,11 @@
 #
 # Also works without a checkout (installs the released package from PyPI):
 #   curl -fsSL https://priorstates.com/install.sh | sh
-set -euo pipefail
+#
+# POSIX sh — must run under dash (Ubuntu's /bin/sh), not just bash.
+set -eu
+# pipefail isn't POSIX; enable it only where the shell supports it.
+(set -o pipefail) 2>/dev/null && set -o pipefail || true
 
 # Detect whether we're running inside a checkout (./install.sh) or piped from
 # curl (no source tree -> install from PyPI).
@@ -37,7 +41,22 @@ for a in "$@"; do
 done
 [ "$EXTRAS" = 1 ] && EXTRA_SPEC="[full]"
 
-PY="${PYTHON:-python3}"
+# ---- find a suitable python (3.10+) ----------------------------------------
+PY=""
+for c in "${PYTHON:-python3}" python3 python3.13 python3.12 python3.11 python3.10; do
+  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys;exit(0 if sys.version_info>=(3,10) else 1)' 2>/dev/null; then
+    PY="$c"; break
+  fi
+done
+if [ -z "$PY" ]; then
+  echo "ERROR: Python 3.10+ is required but was not found."
+  echo "  - Debian/Ubuntu:  sudo apt install python3 python3-pip python3-venv"
+  echo "  - Fedora:         sudo dnf install python3 python3-pip"
+  echo "  - macOS:          brew install python   (or python.org's installer)"
+  echo "Then re-run this installer."
+  exit 1
+fi
+
 if [ "$LOCAL_TREE" = 1 ]; then
   SPEC=".$EXTRA_SPEC"
 else
@@ -53,18 +72,46 @@ else
   fi
 fi
 
-# A pre-PEP621 setuptools silently builds an empty "UNKNOWN-0.0.0" wheel. Make
-# sure the build front-end has a modern setuptools/wheel before we build.
-echo "==> ensuring modern build tooling"
-"$PY" -m pip install --user -q --upgrade pip setuptools wheel >/dev/null 2>&1 || \
-  echo "    (could not upgrade build tooling; continuing)"
+# ---- pick the install method: pipx if present, else pip --user --------------
+USE_PIPX=0
+if command -v pipx >/dev/null 2>&1; then
+  USE_PIPX=1
+elif ! "$PY" -m pip --version >/dev/null 2>&1; then
+  echo "ERROR: neither pipx nor pip is available for $PY."
+  echo "  - Debian/Ubuntu:  sudo apt install pipx        (recommended)"
+  echo "                    or: sudo apt install python3-pip python3-venv"
+  echo "  - Fedora:         sudo dnf install pipx        (or python3-pip)"
+  echo "  - macOS (brew):   brew install pipx"
+  echo "Then re-run this installer."
+  exit 1
+fi
 
-# Clean any prior bad install from an earlier attempt.
-"$PY" -m pip uninstall -y UNKNOWN >/dev/null 2>&1 || true
-"$PY" -m pip uninstall -y priorstates >/dev/null 2>&1 || true
+# PEP 668: distro pythons (Ubuntu 23.04+/Debian 12+) refuse `pip --user` unless
+# --break-system-packages is passed. --user installs stay in ~/.local, so this
+# is safe; pipx (preferred above) sidesteps the issue entirely.
+PIPFLAGS="--user"
+STDLIB="$("$PY" -c 'import sysconfig; print(sysconfig.get_path("stdlib"))' 2>/dev/null || true)"
+if [ -n "$STDLIB" ] && [ -f "$STDLIB/EXTERNALLY-MANAGED" ]; then
+  PIPFLAGS="--user --break-system-packages"
+fi
+
+if [ "$USE_PIPX" = 0 ]; then
+  # A pre-PEP621 setuptools silently builds an empty "UNKNOWN-0.0.0" wheel. Make
+  # sure the build front-end has a modern setuptools/wheel before we build.
+  echo "==> ensuring modern build tooling"
+  # shellcheck disable=SC2086
+  "$PY" -m pip install $PIPFLAGS -q --upgrade pip setuptools wheel >/dev/null 2>&1 || \
+    echo "    (could not upgrade build tooling; continuing)"
+
+  # Clean any prior bad install from an earlier attempt.
+  # shellcheck disable=SC2086
+  "$PY" -m pip uninstall $PIPFLAGS -y UNKNOWN >/dev/null 2>&1 || true
+  # shellcheck disable=SC2086
+  "$PY" -m pip uninstall $PIPFLAGS -y priorstates >/dev/null 2>&1 || true
+fi
 
 echo "==> installing priorstates ($SPEC)"
-if command -v pipx >/dev/null 2>&1; then
+if [ "$USE_PIPX" = 1 ]; then
   if [ "$LOCAL_TREE" = 1 ]; then
     pipx install --force "$HERE"
   elif [ -n "${PRIORSTATES_REPO:-}" ]; then
@@ -77,11 +124,13 @@ if command -v pipx >/dev/null 2>&1; then
     "[mcp,onnx]") pipx inject priorstates onnxruntime tokenizers mcp || true ;;
     *)            pipx inject priorstates mcp || true ;;
   esac
+  pipx ensurepath >/dev/null 2>&1 || true
 else
-  echo "    (pipx not found; using pip --user)"
+  echo "    (pipx not found; using pip $PIPFLAGS)"
   # --no-cache-dir: source-tree/git versions are static, so pip would otherwise
   # reuse a stale cached wheel from a previous commit and "update" to old code.
-  if ! "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$SPEC"; then
+  # shellcheck disable=SC2086
+  if ! "$PY" -m pip install $PIPFLAGS --upgrade --force-reinstall --no-cache-dir "$SPEC"; then
     # onnxruntime has no wheel on some platform/Python combos — fall back to the
     # lite install (hashing recall) rather than failing the whole setup.
     case "$EXTRA_SPEC" in
@@ -92,29 +141,45 @@ else
         if [ "$LOCAL_TREE" = 1 ]; then LSPEC=".[mcp]"
         elif [ -n "${PRIORSTATES_REPO:-}" ]; then LSPEC="priorstates[mcp] @ git+$PRIORSTATES_REPO"
         else LSPEC="priorstates[mcp]"; fi
-        "$PY" -m pip install --user --upgrade --force-reinstall --no-cache-dir "$LSPEC"
+        # shellcheck disable=SC2086
+        "$PY" -m pip install $PIPFLAGS --upgrade --force-reinstall --no-cache-dir "$LSPEC"
         ;;
     esac
   fi
 fi
 
-# Verify the build actually produced the priorstates package (not UNKNOWN).
-if ! "$PY" -c "import priorstates" >/dev/null 2>&1; then
-  echo "ERROR: priorstates did not import after install. Your Python's build tooling"
-  echo "       is likely too old to read pyproject metadata (it produced an empty"
-  echo "       'UNKNOWN' package). Upgrade and retry:"
-  echo "         $PY -m pip install --user --upgrade pip setuptools wheel"
-  echo "         $PY -m pip install --user --force-reinstall '$SPEC'"
-  if [ "$LOCAL_TREE" = 1 ]; then
-    echo "       Meanwhile you can run everything from this folder with:"
-    echo "         cd $HERE && $PY -m priorstates <command>"
+# ---- verify + pick how to run post-install steps ----------------------------
+# pipx installs into its own venv: the system python can NOT `import priorstates`
+# there, so verify (and run init etc.) via the installed entry point instead.
+PM=""
+if [ "$USE_PIPX" = 1 ]; then
+  for cand in "$(command -v priorstates 2>/dev/null || true)" "$HOME/.local/bin/priorstates"; do
+    if [ -n "$cand" ] && [ -x "$cand" ] && "$cand" --help >/dev/null 2>&1; then
+      PM="$cand"; break
+    fi
+  done
+  if [ -z "$PM" ]; then
+    echo "ERROR: pipx reported success but the 'priorstates' command does not run."
+    echo "       Check 'pipx list' and ensure ~/.local/bin is on your PATH"
+    echo "       (run: pipx ensurepath), then retry."
+    exit 1
   fi
-  exit 1
+else
+  if "$PY" -c "import priorstates" >/dev/null 2>&1; then
+    PM="$PY -m priorstates"
+  else
+    echo "ERROR: priorstates did not import after install. Your Python's build tooling"
+    echo "       is likely too old to read pyproject metadata (it produced an empty"
+    echo "       'UNKNOWN' package). Upgrade and retry:"
+    echo "         $PY -m pip install $PIPFLAGS --upgrade pip setuptools wheel"
+    echo "         $PY -m pip install $PIPFLAGS --force-reinstall '$SPEC'"
+    if [ "$LOCAL_TREE" = 1 ]; then
+      echo "       Meanwhile you can run everything from this folder with:"
+      echo "         cd $HERE && $PY -m priorstates <command>"
+    fi
+    exit 1
+  fi
 fi
-
-# Run post-install steps via `python -m priorstates` so they work even if the
-# console-script dir (e.g. ~/.local/bin) is not on PATH.
-PM="$PY -m priorstates"
 
 echo "==> priorstates init"
 if [ "$WIRE" = 1 ]; then
@@ -136,10 +201,14 @@ echo "==> creating GUI launcher"
 $PM install-launcher --desktop || true
 
 # PATH hint for the bare `priorstates` command.
-SCRIPTDIR="$("$PY" -c 'import sysconfig,os; print(sysconfig.get_path("scripts", f"{os.name}_user"))' 2>/dev/null || true)"
+if [ "$USE_PIPX" = 1 ]; then
+  SCRIPTDIR="$(dirname "$PM")"
+else
+  SCRIPTDIR="$("$PY" -c 'import sysconfig,os; print(sysconfig.get_path("scripts", f"{os.name}_user"))' 2>/dev/null || true)"
+fi
 echo
 echo "Done. Use either form:"
-echo "  $PY -m priorstates <command>     # always works"
+echo "  $PM <command>     # always works"
 if [ -n "$SCRIPTDIR" ] && [ -x "$SCRIPTDIR/priorstates" ]; then
   case ":$PATH:" in
     *":$SCRIPTDIR:"*) echo "  priorstates <command>            # on your PATH" ;;
@@ -148,7 +217,7 @@ if [ -n "$SCRIPTDIR" ] && [ -x "$SCRIPTDIR/priorstates" ]; then
 fi
 echo
 echo "Try:"
-echo "  $PY -m priorstates doctor"
-echo "  $PY -m priorstates gui"
-echo "  $PY -m priorstates cockpit       # → http://127.0.0.1:7700"
-[ "$WIRE" = 1 ] || echo "  $PY -m priorstates agents install"
+echo "  $PM doctor"
+echo "  $PM gui"
+echo "  $PM cockpit       # → http://127.0.0.1:7700"
+[ "$WIRE" = 1 ] || echo "  $PM agents install"

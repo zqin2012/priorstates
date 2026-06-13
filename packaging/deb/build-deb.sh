@@ -166,7 +166,8 @@ Section: utils
 Priority: optional
 Installed-Size: $INSTALLED_KB
 Depends: python3 (>= 3.10), python3-numpy, python3-tk, python3-cryptography
-Suggests: python3-pip
+Recommends: python3-pip
+Suggests: pipx
 Conflicts: priorstates-hub
 Homepage: https://github.com/zqin2012/priorstates
 Description: PriorStates — shared AI memory, research journal & cockpit
@@ -190,8 +191,11 @@ command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t 
 cat <<'MSG'
 
 PriorStates installed.  Quick start (as your normal user, not root):
-  python3 -m pip install --user mcp onnxruntime tokenizers
+  PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --user mcp onnxruntime tokenizers
                                  # agent (MCP) tools + semantic recall libs
+                                 # (the env var satisfies PEP 668 on Ubuntu
+                                 #  23.04+/Debian 12+; older pip ignores it.
+                                 #  --user keeps everything in ~/.local)
   priorstates init               # wire every detected AI agent (once)
   priorstates init --download-model   # semantic recall (~127 MB, local)
   priorstates doctor             # status — which agents are wired
