@@ -42,7 +42,7 @@ def cmd_init(args):
         print(f"initialized project scope at {pdir}")
 
     if args.download_model:
-        _download_model()
+        _download_model(force=getattr(args, "redownload_model", False))
 
     # Install-and-forget: wire every DETECTED agent by default, so one `init`
     # gives all AI tools on the machine the shared memory. Opt out: --no-wire.
@@ -107,57 +107,73 @@ def _http_download(url: str, out: Path, retries: int = 3):
     raise last_err
 
 
-def _download_model():
+def _model_present(dest: Path) -> bool:
+    """True iff every model file is already on disk and the ONNX weights look
+    complete (not a truncated/partial download)."""
+    onnx = dest / "onnx" / "model.onnx"
+    return (onnx.exists() and onnx.stat().st_size > 1_000_000
+            and all((dest / rel).exists() for rel in MODEL_FILES))
+
+
+def _download_model(force: bool = False):
     home = home_dir()
     dest = home / "models" / "bge-small-en-v1.5"
-    repo = os.environ.get("PRIORSTATES_HF_REPO", "BAAI/bge-small-en-v1.5")
-    # Sources tried IN ORDER. Our own mirror is primary — it has no HuggingFace
-    # rate limits, so the model arrives reliably on a fresh install; HF is the
-    # fallback. Override the primary with PRIORSTATES_MODEL_BASE, or force HF by
-    # pointing it there. `<base>/bge-small-en-v1.5/<rel>` is the layout.
-    mirror = os.environ.get("PRIORSTATES_MODEL_BASE",
-                            "https://priorstates.com/download/models")
-    hf_base = os.environ.get("PRIORSTATES_HF_BASE", "https://huggingface.co")
-    sources = [
-        ("priorstates.com", lambda rel: f"{mirror}/bge-small-en-v1.5/{rel}"),
-        ("huggingface.co",  lambda rel: f"{hf_base}/{repo}/resolve/main/{rel}"),
-    ]
-    print(f"downloading bge-small-en-v1.5 -> {dest} (~127 MB)...")
 
-    ok = False
-    last_err = None
-    for name, url_for in sources:
-        try:
-            for rel in MODEL_FILES:
-                _http_download(url_for(rel), dest / rel)
-            ok = True
-            break
-        except Exception as e:  # noqa: BLE001
-            last_err = e
-            print(f"  source {name} failed ({e}); trying next...")
+    # Already here? Don't re-fetch ~127 MB on every re-run / upgrade — the
+    # installers call this unconditionally. `--force` (or deleting the dir)
+    # re-downloads. We still fall through to the enable/reindex tail below so a
+    # newly-installed onnxruntime gets picked up.
+    if _model_present(dest) and not force:
+        print(f"semantic model already present at {dest} (skipping download).")
+    else:
+        repo = os.environ.get("PRIORSTATES_HF_REPO", "BAAI/bge-small-en-v1.5")
+        # Sources tried IN ORDER. priorstates.com is the configured primary; it
+        # currently 302-redirects to HuggingFace (mirror serving is off to save
+        # egress) — the client follows the redirect transparently. HF is also the
+        # explicit fallback. Override the primary with PRIORSTATES_MODEL_BASE.
+        # `<base>/bge-small-en-v1.5/<rel>` is the layout.
+        mirror = os.environ.get("PRIORSTATES_MODEL_BASE",
+                                "https://priorstates.com/download/models")
+        hf_base = os.environ.get("PRIORSTATES_HF_BASE", "https://huggingface.co")
+        sources = [
+            ("priorstates.com", lambda rel: f"{mirror}/bge-small-en-v1.5/{rel}"),
+            ("huggingface.co",  lambda rel: f"{hf_base}/{repo}/resolve/main/{rel}"),
+        ]
+        print(f"downloading bge-small-en-v1.5 -> {dest} (~127 MB)...")
 
-    if not ok:
-        # Last resort: huggingface_hub if it happens to be installed (resumable).
-        try:
-            from huggingface_hub import snapshot_download
-            snapshot_download(repo, local_dir=str(dest), allow_patterns=MODEL_FILES)
-            ok = True
-        except Exception as e:  # noqa: BLE001
-            last_err = e
+        ok = False
+        last_err = None
+        for name, url_for in sources:
+            try:
+                for rel in MODEL_FILES:
+                    _http_download(url_for(rel), dest / rel)
+                ok = True
+                break
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                print(f"  source {name} failed ({e}); trying next...")
 
-    if not ok:
-        print(f"\ncould not download model ({last_err}).")
-        print(f"  Check your network, or place the ONNX model + tokenizer under {dest}/ "
-              f"manually (files: {', '.join(MODEL_FILES)}).")
-        print("  The hashing fallback keeps working meanwhile; re-run "
-              "`priorstates init --download-model` to retry.")
-        return
+        if not ok:
+            # Last resort: huggingface_hub if installed (resumable).
+            try:
+                from huggingface_hub import snapshot_download
+                snapshot_download(repo, local_dir=str(dest), allow_patterns=MODEL_FILES)
+                ok = True
+            except Exception as e:  # noqa: BLE001
+                last_err = e
 
-    onnx = dest / "onnx" / "model.onnx"
-    if not onnx.exists() or onnx.stat().st_size < 1_000_000:
-        print("model files look incomplete -- re-run `priorstates init --download-model`.")
-        return
-    print("model files installed.")
+        if not ok:
+            print(f"\ncould not download model ({last_err}).")
+            print(f"  Check your network, or place the ONNX model + tokenizer under {dest}/ "
+                  f"manually (files: {', '.join(MODEL_FILES)}).")
+            print("  The hashing fallback keeps working meanwhile; re-run "
+                  "`priorstates init --download-model` to retry.")
+            return
+
+        if not _model_present(dest):
+            print("model files look incomplete -- re-run `priorstates init --download-model`.")
+            return
+        print("model files installed.")
 
     # Semantic recall also needs the inference libraries.
     missing = [m for m in ("onnxruntime", "tokenizers") if not _importable(m)]
@@ -1122,7 +1138,9 @@ def build_parser():
     pi = sub.add_parser("init", help="initialize global + project scopes")
     pi.add_argument("path", nargs="?", help="project root (default: cwd)")
     pi.add_argument("--global-only", action="store_true")
-    pi.add_argument("--download-model", action="store_true", help="fetch the ONNX embedding model")
+    pi.add_argument("--download-model", action="store_true", help="fetch the ONNX embedding model (skips if already present)")
+    pi.add_argument("--redownload-model", dest="redownload_model", action="store_true",
+                    help="with --download-model: re-fetch even if the model is already present")
     pi.add_argument("--no-wire", action="store_true",
                     help="do NOT auto-wire detected AI agents (default wires them all)")
     pi.set_defaults(func=cmd_init)
