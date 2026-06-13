@@ -50,9 +50,10 @@ for c in "${PYTHON:-python3}" python3 python3.13 python3.12 python3.11 python3.1
 done
 if [ -z "$PY" ]; then
   echo "ERROR: Python 3.10+ is required but was not found."
-  echo "  - Debian/Ubuntu:  sudo apt install python3 python3-pip python3-venv"
-  echo "  - Fedora:         sudo dnf install python3 python3-pip"
-  echo "  - macOS:          brew install python   (or python.org's installer)"
+  echo "  - Debian/Ubuntu:      sudo apt install python3 python3-pip python3-venv"
+  echo "  - RHEL/Rocky/Alma 9:  sudo dnf install python3.12 python3.12-pip   (default python3 is 3.9)"
+  echo "  - Fedora:             sudo dnf install python3 python3-pip"
+  echo "  - macOS:              brew install python   (or python.org's installer)"
   echo "Then re-run this installer."
   exit 1
 fi
@@ -78,10 +79,11 @@ if command -v pipx >/dev/null 2>&1; then
   USE_PIPX=1
 elif ! "$PY" -m pip --version >/dev/null 2>&1; then
   echo "ERROR: neither pipx nor pip is available for $PY."
-  echo "  - Debian/Ubuntu:  sudo apt install pipx        (recommended)"
-  echo "                    or: sudo apt install python3-pip python3-venv"
-  echo "  - Fedora:         sudo dnf install pipx        (or python3-pip)"
-  echo "  - macOS (brew):   brew install pipx"
+  echo "  - Debian/Ubuntu:      sudo apt install pipx        (recommended)"
+  echo "                        or: sudo apt install python3-pip python3-venv"
+  echo "  - RHEL/Rocky/Alma 9:  sudo dnf install python3.12-pip   (pip for python3.12)"
+  echo "  - Fedora:             sudo dnf install pipx        (or python3-pip)"
+  echo "  - macOS (brew):       brew install pipx"
   echo "Then re-run this installer."
   exit 1
 fi

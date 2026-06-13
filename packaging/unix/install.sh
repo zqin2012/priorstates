@@ -43,8 +43,11 @@ for c in python3 python3.13 python3.12 python3.11 python3.10; do
 done
 if [ -z "$PY" ]; then
   echo "Python 3.10+ is required but was not found."
-  echo "  • Ubuntu/Debian:  sudo apt install python3 python3-venv python3-tk"
-  echo "  • macOS:          brew install python-tk   (or python.org's installer)"
+  echo "  • Ubuntu/Debian:      sudo apt install python3 python3-venv python3-tk"
+  echo "  • RHEL/Rocky/Alma 9:  sudo dnf install python3.12   (default python3 is 3.9)"
+  echo "  • Fedora:             sudo dnf install python3 python3-tkinter"
+  echo "  • macOS:              brew install python-tk   (or python.org's installer)"
+  echo "Then re-run this installer."
   exit 1
 fi
 echo "==> using $($PY -V) at $(command -v "$PY")"
