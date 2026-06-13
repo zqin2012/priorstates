@@ -24,7 +24,7 @@ BuildArch:      noarch
 AutoReqProv:    no
 Requires:       (python3.12 or python3 >= 3.10)
 Requires:       (python3.12-numpy if python3.12 else python3-numpy)
-Recommends:     (python3.12-pip if python3.12 else python3-pip)
+Requires:       (python3.12-pip if python3.12 else python3-pip)
 Recommends:     (python3.12-tkinter if python3.12 else python3-tkinter)
 Conflicts:      priorstates-hub
 
@@ -60,25 +60,23 @@ command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t 
 PSPY=python3
 python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1 || PSPY=python3.12
 
-# Finish setup automatically — no manual steps. The MCP/onnx libs aren't rpm
-# packages, so install them into the installing user's site, wire agents, and
-# fetch the semantic model. Runs as $SUDO_USER (set by `sudo dnf install`).
-# Non-fatal so a network hiccup never fails the package install.
+# Finish setup now, in this thread, with progress so the user knows what's
+# happening and how long to expect (~a minute). The MCP/onnx libs aren't rpm
+# packages and the model is ~127 MB. Runs as the installing user ($SUDO_USER)
+# with $PSPY (python3.12 on EL9). Each step non-fatal — a network blip never
+# fails the package, it just prints how to finish later.
 U="${SUDO_USER:-}"
-if [ -n "$U" ] && [ "$U" != "root" ]; then
-  H="$(getent passwd "$U" | cut -d: -f6)"
-  if command -v runuser >/dev/null 2>&1; then
-    asuser() { runuser -u "$U" -- env HOME="$H" PIP_BREAK_SYSTEM_PACKAGES=1 "$@"; }
-  else
-    asuser() { sudo -u "$U" -H env PIP_BREAK_SYSTEM_PACKAGES=1 "$@"; }
-  fi
-  echo "PriorStates: finishing setup for $U (MCP tools + ~127 MB semantic model)..."
-  asuser $PSPY -m pip install --user -q mcp onnxruntime tokenizers \
-    || echo "  note: MCP/onnx libs not installed (offline?) — later run: $PSPY -m pip install --user mcp onnxruntime tokenizers"
-  asuser priorstates init >/dev/null 2>&1 || :
-  asuser priorstates init --download-model \
-    || echo "  note: model download deferred — later run: priorstates init --download-model"
-  echo "PriorStates ready — launch it from your application menu or run: priorstates-gui"
+if [ -n "$U" ] && [ "$U" != "root" ] && command -v runuser >/dev/null 2>&1; then
+  echo "Finishing PriorStates setup for $U (about a minute) — so it's ready when you open it:"
+  echo "  - installing agent (MCP) tools + semantic-recall libraries ..."
+  runuser -l "$U" -c "PIP_BREAK_SYSTEM_PACKAGES=1 $PSPY -m pip install --user -q mcp onnxruntime tokenizers" >/dev/null 2>&1 \
+    || echo "    (skipped, no network? finish later: $PSPY -m pip install --user mcp onnxruntime tokenizers)"
+  echo "  - wiring your AI agents (Claude Code, Copilot, Cursor, Codex, Gemini) ..."
+  runuser -l "$U" -c 'priorstates init' >/dev/null 2>&1 || :
+  echo "  - downloading the semantic-recall model (~127 MB) ..."
+  runuser -l "$U" -c 'priorstates init --download-model' >/dev/null 2>&1 \
+    || echo "    (skipped, no network? finish later: priorstates init --download-model)"
+  echo "PriorStates is ready. Launch it from your application menu or run: priorstates-gui"
 else
 cat <<MSG
 

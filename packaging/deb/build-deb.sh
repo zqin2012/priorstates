@@ -165,8 +165,7 @@ Maintainer: Zhendong Qin <service@priorstates.com>
 Section: utils
 Priority: optional
 Installed-Size: $INSTALLED_KB
-Depends: python3 (>= 3.10), python3-numpy, python3-tk, python3-cryptography
-Recommends: python3-pip
+Depends: python3 (>= 3.10), python3-pip, python3-venv, python3-numpy, python3-tk, python3-cryptography
 Suggests: pipx
 Conflicts: priorstates-hub
 Homepage: https://github.com/zqin2012/priorstates
@@ -189,25 +188,24 @@ command -v py3compile >/dev/null 2>&1 && py3compile -p priorstates >/dev/null 2>
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
 
-# Finish setup automatically — no manual steps. The MCP/onnx libs aren't apt
-# packages, so install them into the installing user's site, wire agents, and
-# fetch the semantic model. Runs as $SUDO_USER (set by `sudo apt install`).
-# Each step is non-fatal so a network hiccup never fails the package install.
+# Finish setup now, in this thread, with progress so the user knows what's
+# happening and how long to expect. The MCP/onnx libs aren't apt packages and
+# the model is ~127 MB, so this adds about a minute to the install — better the
+# user sees it run than have a half-set-up app or a silent background job. Runs
+# as the installing user ($SUDO_USER); each step is non-fatal, so a network blip
+# never fails the package (it just prints how to finish later).
 U="${SUDO_USER:-}"
-if [ -n "$U" ] && [ "$U" != "root" ]; then
-  H="$(getent passwd "$U" | cut -d: -f6)"
-  if command -v runuser >/dev/null 2>&1; then
-    asuser() { runuser -u "$U" -- env HOME="$H" PIP_BREAK_SYSTEM_PACKAGES=1 "$@"; }
-  else
-    asuser() { sudo -u "$U" -H env PIP_BREAK_SYSTEM_PACKAGES=1 "$@"; }
-  fi
-  echo "PriorStates: finishing setup for $U (MCP tools + ~127 MB semantic model)..."
-  asuser python3 -m pip install --user -q mcp onnxruntime tokenizers \
-    || echo "  note: MCP/onnx libs not installed (offline?) — later run: pip install --user mcp onnxruntime tokenizers"
-  asuser priorstates init >/dev/null 2>&1 || true
-  asuser priorstates init --download-model \
-    || echo "  note: model download deferred — later run: priorstates init --download-model"
-  echo "PriorStates ready — launch it from your application menu or run: priorstates-gui"
+if [ -n "$U" ] && [ "$U" != "root" ] && command -v runuser >/dev/null 2>&1; then
+  echo "Finishing PriorStates setup for $U (about a minute) — so it's ready when you open it:"
+  echo "  - installing agent (MCP) tools + semantic-recall libraries ..."
+  runuser -l "$U" -c 'PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --user -q mcp onnxruntime tokenizers' >/dev/null 2>&1 \
+    || echo "    (skipped, no network? finish later: pip install --user mcp onnxruntime tokenizers)"
+  echo "  - wiring your AI agents (Claude Code, Copilot, Cursor, Codex, Gemini) ..."
+  runuser -l "$U" -c 'priorstates init' >/dev/null 2>&1 || true
+  echo "  - downloading the semantic-recall model (~127 MB) ..."
+  runuser -l "$U" -c 'priorstates init --download-model' >/dev/null 2>&1 \
+    || echo "    (skipped, no network? finish later: priorstates init --download-model)"
+  echo "PriorStates is ready. Launch it from your application menu or run: priorstates-gui"
 else
   cat <<'MSG'
 PriorStates installed. Finish setup as your normal user (one line):
