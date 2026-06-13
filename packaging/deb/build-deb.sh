@@ -188,22 +188,33 @@ set -e
 command -v py3compile >/dev/null 2>&1 && py3compile -p priorstates >/dev/null 2>&1 || true
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
-cat <<'MSG'
 
-PriorStates installed.  Quick start (as your normal user, not root):
-  PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --user mcp onnxruntime tokenizers
-                                 # agent (MCP) tools + semantic recall libs
-                                 # (the env var satisfies PEP 668 on Ubuntu
-                                 #  23.04+/Debian 12+; older pip ignores it.
-                                 #  --user keeps everything in ~/.local)
-  priorstates init               # wire every detected AI agent (once)
-  priorstates init --download-model   # semantic recall (~127 MB, local)
-  priorstates doctor             # status — which agents are wired
-  priorstates cockpit            # local web cockpit
-  priorstates-gui                # desktop control panel
-
+# Finish setup automatically — no manual steps. The MCP/onnx libs aren't apt
+# packages, so install them into the installing user's site, wire agents, and
+# fetch the semantic model. Runs as $SUDO_USER (set by `sudo apt install`).
+# Each step is non-fatal so a network hiccup never fails the package install.
+U="${SUDO_USER:-}"
+if [ -n "$U" ] && [ "$U" != "root" ]; then
+  H="$(getent passwd "$U" | cut -d: -f6)"
+  if command -v runuser >/dev/null 2>&1; then
+    asuser() { runuser -u "$U" -- env HOME="$H" PIP_BREAK_SYSTEM_PACKAGES=1 "$@"; }
+  else
+    asuser() { sudo -u "$U" -H env PIP_BREAK_SYSTEM_PACKAGES=1 "$@"; }
+  fi
+  echo "PriorStates: finishing setup for $U (MCP tools + ~127 MB semantic model)..."
+  asuser python3 -m pip install --user -q mcp onnxruntime tokenizers \
+    || echo "  note: MCP/onnx libs not installed (offline?) — later run: pip install --user mcp onnxruntime tokenizers"
+  asuser priorstates init >/dev/null 2>&1 || true
+  asuser priorstates init --download-model \
+    || echo "  note: model download deferred — later run: priorstates init --download-model"
+  echo "PriorStates ready — launch it from your application menu or run: priorstates-gui"
+else
+  cat <<'MSG'
+PriorStates installed. Finish setup as your normal user (one line):
+  PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --user mcp onnxruntime tokenizers && priorstates init && priorstates init --download-model
 Find "PriorStates" in your application menu, too.
 MSG
+fi
 exit 0
 POST
 

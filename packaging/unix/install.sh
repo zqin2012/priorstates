@@ -42,15 +42,30 @@ for c in python3 python3.13 python3.12 python3.11 python3.10; do
   fi
 done
 if [ -z "$PY" ]; then
-  echo "Python 3.10+ is required but was not found."
-  echo "  • Ubuntu/Debian:      sudo apt install python3 python3-venv python3-tk"
-  echo "  • RHEL/Rocky/Alma 9:  sudo dnf install python3.12   (default python3 is 3.9)"
-  echo "  • Fedora:             sudo dnf install python3 python3-tkinter"
-  echo "  • macOS:              brew install python-tk   (or python.org's installer)"
-  echo "Then re-run this installer."
-  exit 1
+  # No suitable Python — install a private copy ourselves (no admin needed) so
+  # the user never has to. uv is a single static binary that drops a relocatable
+  # CPython in seconds; it does not touch the system Python.
+  echo "==> no Python 3.10+ found — installing a private copy automatically (no admin needed)"
+  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  if ! command -v uv >/dev/null 2>&1; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || true
+    elif command -v wget >/dev/null 2>&1; then
+      wget -qO- https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || true
+    fi
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  fi
+  if command -v uv >/dev/null 2>&1; then
+    uv python install 3.12 >/dev/null 2>&1 || true
+    PY="$(uv python find 3.12 2>/dev/null || true)"
+  fi
+  if [ -z "$PY" ] || [ ! -x "$PY" ]; then
+    echo "!! could not auto-install Python (no network?). Install Python 3.10+ and re-run:"
+    echo "   macOS: brew install python   •   Linux: sudo apt install python3 python3-venv"
+    exit 1
+  fi
 fi
-echo "==> using $($PY -V) at $(command -v "$PY")"
+echo "==> using $($PY -V) at $PY"
 
 # ---- create the venv (fall back to pip --user if venv is unavailable) -----
 mkdir -p "$DATA" "$BIN"

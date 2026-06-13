@@ -56,25 +56,37 @@ cp -a %{stagedir}/. %{buildroot}/
 %post
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || :
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t -q /usr/share/icons/hicolor >/dev/null 2>&1 || :
-# Pick the same interpreter the launcher will use, so the printed pip line
-# targets the right user site (EL9: python3.12; Fedora/EL10: python3).
+# Pick the same interpreter the launcher will use (EL9: python3.12; Fedora/EL10: python3).
 PSPY=python3
 python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1 || PSPY=python3.12
+
+# Finish setup automatically — no manual steps. The MCP/onnx libs aren't rpm
+# packages, so install them into the installing user's site, wire agents, and
+# fetch the semantic model. Runs as $SUDO_USER (set by `sudo dnf install`).
+# Non-fatal so a network hiccup never fails the package install.
+U="${SUDO_USER:-}"
+if [ -n "$U" ] && [ "$U" != "root" ]; then
+  H="$(getent passwd "$U" | cut -d: -f6)"
+  if command -v runuser >/dev/null 2>&1; then
+    asuser() { runuser -u "$U" -- env HOME="$H" PIP_BREAK_SYSTEM_PACKAGES=1 "$@"; }
+  else
+    asuser() { sudo -u "$U" -H env PIP_BREAK_SYSTEM_PACKAGES=1 "$@"; }
+  fi
+  echo "PriorStates: finishing setup for $U (MCP tools + ~127 MB semantic model)..."
+  asuser $PSPY -m pip install --user -q mcp onnxruntime tokenizers \
+    || echo "  note: MCP/onnx libs not installed (offline?) — later run: $PSPY -m pip install --user mcp onnxruntime tokenizers"
+  asuser priorstates init >/dev/null 2>&1 || :
+  asuser priorstates init --download-model \
+    || echo "  note: model download deferred — later run: priorstates init --download-model"
+  echo "PriorStates ready — launch it from your application menu or run: priorstates-gui"
+else
 cat <<MSG
 
-PriorStates installed.  Quick start (as your normal user, not root):
-  PIP_BREAK_SYSTEM_PACKAGES=1 $PSPY -m pip install --user mcp onnxruntime tokenizers
-                                 # agent (MCP) tools + semantic recall libs
-                                 # (the env var satisfies PEP 668 on Fedora;
-                                 #  harmless elsewhere. --user stays in ~/.local)
-  priorstates init               # wire every detected AI agent (once)
-  priorstates init --download-model   # semantic recall (~127 MB, local)
-  priorstates doctor             # status — which agents are wired
-  priorstates cockpit            # local web cockpit
-  priorstates-gui                # desktop control panel
-
+PriorStates installed. Finish setup as your normal user (one line):
+  PIP_BREAK_SYSTEM_PACKAGES=1 $PSPY -m pip install --user mcp onnxruntime tokenizers && priorstates init && priorstates init --download-model
 Find "PriorStates" in your application menu, too.
 MSG
+fi
 exit 0
 
 %postun

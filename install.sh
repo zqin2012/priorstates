@@ -48,14 +48,35 @@ for c in "${PYTHON:-python3}" python3 python3.13 python3.12 python3.11 python3.1
     PY="$c"; break
   fi
 done
+PROVISIONED=0
 if [ -z "$PY" ]; then
-  echo "ERROR: Python 3.10+ is required but was not found."
-  echo "  - Debian/Ubuntu:      sudo apt install python3 python3-pip python3-venv"
-  echo "  - RHEL/Rocky/Alma 9:  sudo dnf install python3.12 python3.12-pip   (default python3 is 3.9)"
-  echo "  - Fedora:             sudo dnf install python3 python3-pip"
-  echo "  - macOS:              brew install python   (or python.org's installer)"
-  echo "Then re-run this installer."
-  exit 1
+  # No suitable Python — install a private copy ourselves (no admin needed) so
+  # the user never has to. uv is a single static binary that drops a relocatable
+  # CPython in seconds without touching the system Python. When we provision this
+  # way we install into a dedicated venv (below), since pipx/system-pip wouldn't
+  # see it.
+  echo "==> no Python 3.10+ found — installing a private copy automatically (no admin needed)"
+  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  if ! command -v uv >/dev/null 2>&1; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || true
+    elif command -v wget >/dev/null 2>&1; then
+      wget -qO- https://astral.sh/uv/install.sh | sh >/dev/null 2>&1 || true
+    fi
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  fi
+  if command -v uv >/dev/null 2>&1; then
+    uv python install 3.12 >/dev/null 2>&1 || true
+    PY="$(uv python find 3.12 2>/dev/null || true)"
+  fi
+  if [ -z "$PY" ] || [ ! -x "$PY" ]; then
+    echo "ERROR: could not auto-install Python (no network?). Install Python 3.10+ and re-run:"
+    echo "  - macOS:  brew install python   (or python.org's installer)"
+    echo "  - Linux:  sudo apt install python3 python3-venv   /   sudo dnf install python3.12"
+    exit 1
+  fi
+  PROVISIONED=1
+  echo "==> provisioned $("$PY" -V) via uv"
 fi
 
 if [ "$LOCAL_TREE" = 1 ]; then
@@ -73,6 +94,30 @@ else
   fi
 fi
 
+# ---- install ----------------------------------------------------------------
+if [ "$PROVISIONED" = 1 ]; then
+  # We installed our own Python via uv → install into a dedicated venv (pipx and
+  # system pip wouldn't use it). The venv bootstraps its own pip via ensurepip.
+  VENV="${XDG_DATA_HOME:-$HOME/.local/share}/priorstates/venv"
+  mkdir -p "$(dirname "$VENV")" "$HOME/.local/bin"
+  "$PY" -m venv "$VENV"
+  "$VENV/bin/python" -m pip install -q --upgrade pip >/dev/null 2>&1 || true
+  echo "==> installing priorstates ($SPEC) into a private venv"
+  if ! "$VENV/bin/python" -m pip install --upgrade --no-cache-dir "$SPEC"; then
+    case "$EXTRA_SPEC" in
+      "[mcp]") exit 1 ;;
+      *) echo "!! install with inference extras failed — retrying lite (hashing recall)"
+         MODEL=0
+         if [ "$LOCAL_TREE" = 1 ]; then LSPEC=".[mcp]"
+         elif [ -n "${PRIORSTATES_REPO:-}" ]; then LSPEC="priorstates[mcp] @ git+$PRIORSTATES_REPO"
+         else LSPEC="priorstates[mcp]"; fi
+         "$VENV/bin/python" -m pip install --upgrade --no-cache-dir "$LSPEC" ;;
+    esac
+  fi
+  printf '#!/bin/sh\nexec "%s/bin/priorstates" "$@"\n' "$VENV" > "$HOME/.local/bin/priorstates"
+  chmod 0755 "$HOME/.local/bin/priorstates"
+  PM="$VENV/bin/priorstates"
+else
 # ---- pick the install method: pipx if present, else pip --user --------------
 USE_PIPX=0
 if command -v pipx >/dev/null 2>&1; then
@@ -182,6 +227,7 @@ else
     exit 1
   fi
 fi
+fi  # end PROVISIONED branch
 
 echo "==> priorstates init"
 if [ "$WIRE" = 1 ]; then

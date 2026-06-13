@@ -15,3 +15,7 @@ GEMINI.md
 
 # Runtime data dir if priorstates is run inside the repo
 .priorstates/
+
+# agent-wiring artifacts (priorstates agents install writes these per-project)
+.github/copilot-instructions.md
+.priorstates/
