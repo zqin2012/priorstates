@@ -42,8 +42,8 @@ Apt pulls in `python3` + `numpy`, and you get the desktop app, an icon, the
 `priorstates` CLI and man pages — nothing else to install:
 
 ```bash
-curl -fSLO https://github.com/zqin2012/priorstates/releases/latest/download/priorstates_0.1.0_all.deb
-sudo apt install -y ./priorstates_0.1.0_all.deb   # resolves python3 (>= 3.10) + python3-numpy
+curl -fSLO https://priorstates.com/download/priorstates_0.1.14_all.deb
+sudo apt install -y ./priorstates_0.1.14_all.deb   # resolves python3 (>= 3.10) + python3-numpy
 ```
 
 Then just **open “PriorStates” from your application menu** (or run
