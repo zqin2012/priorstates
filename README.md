@@ -104,9 +104,10 @@ On Debian/Ubuntu (PEP 668) use `pipx install priorstates` (or add
 `--user --break-system-packages` to pip).
 </details>
 
-Full install matrix (`.deb` / macOS `.pkg` / Windows / source) is in
-**[docs/QUICKSTART.md](docs/QUICKSTART.md)**. No model download is required — a
-built-in CPU hashing embedder works out of the box.
+More options (pip/pipx, source, corporate Windows, troubleshooting) →
+**[priorstates.com/install](https://priorstates.com/install.html)**. No model
+download is required — a built-in CPU **hashing embedder** works out of the box;
+`priorstates init --download-model` (≈127 MB) upgrades to semantic recall.
 
 ## What's inside
 
@@ -208,7 +209,7 @@ priorstates pack import --demo
 
 - **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** — the everyday-use manual. **Start here.**
 - **[docs/PROJECTS_AND_AREAS.md](docs/PROJECTS_AND_AREAS.md)** — Projects vs Areas: the two scoping axes + the GUI Area selector.
-- **[docs/QUICKSTART.md](docs/QUICKSTART.md)** — install + first run.
+- **[docs/QUICKSTART.md](docs/QUICKSTART.md)** — first run, the two surfaces, and the CLI cheatsheet.
 - **[docs/RESEARCH_WORKFLOW.md](docs/RESEARCH_WORKFLOW.md)** — research folders + how agents log to the journal.
 - **[docs/DATA_MODEL.md](docs/DATA_MODEL.md)** — on-disk schemas + the `.psmem` layout.
 - One-click native installers (the free **Hub edition**) — macOS / Windows / Linux — at **https://priorstates.com/download**.

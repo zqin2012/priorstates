@@ -6,49 +6,35 @@ plus a **desktop GUI** to manage it all. Everything runs on your machine.
 
 ## 1. Install
 
-```bash
-cd priorstates
-./install.sh --wire            # install + init + wire your agents
-# or the works (semantic model + all extras):
-./install.sh --extras --model --wire
-```
+Grab an installer for your OS at **<https://priorstates.com/install>** — all
+**per-user, no root/admin**:
 
-On **Windows**, use the PowerShell installer instead:
+- **Linux** — `.deb`/`.rpm` (app-menu launcher; uses `sudo`), or the no-root one-liner.
+- **macOS** — the `.pkg` ("install for me only" — no admin password; signed & notarized).
+- **Windows** — `Setup.exe` (no admin), or `pipx install priorstates` if `.exe` is blocked.
 
-```powershell
-cd priorstates
-powershell -ExecutionPolicy Bypass -File packaging\windows\install.ps1 -Wire
-# or a double-click installer: packaging\windows\build-installer.ps1 → PriorStates-<ver>-Setup.exe
-```
-
-Manual equivalent:
+Or use Python directly (any OS, no installer):
 
 ```bash
-python3 -m pip install --user --upgrade pip setuptools wheel   # important (see note)
-python3 -m pip install --user .          # or .[full] for the optional extras
-python3 -m priorstates init                 # creates ~/.priorstates/ + ./.priorstates/ here
-python3 -m priorstates agents install       # wire Claude / Codex / Gemini
+pip install -U priorstates          # or: pipx install priorstates
+# …or one command on Linux/macOS (installs, initializes, wires agents):
+curl -fsSL https://priorstates.com/install.sh | sh
 ```
 
-**`python3 -m priorstates` always works** regardless of PATH. The bare `priorstates`
-command also works once the user scripts dir (e.g. `~/.local/bin`) is on your
+Then initialize and wire your agents:
+
+```bash
+priorstates init                    # ~/.priorstates/ (global) + ./.priorstates/ (this project)
+priorstates agents install          # wire Claude / Codex / Gemini over MCP
+```
+
+**`python3 -m priorstates` always works** regardless of PATH; the bare
+`priorstates` command works once your user scripts dir (e.g. `~/.local/bin`) is on
 `PATH`.
 
 No model download is required: memory works immediately with a built-in
-**hashing embedder**. Run `python3 -m priorstates init --download-model` (≈127 MB)
-to upgrade to semantic recall.
-
-> **Troubleshooting — "Building wheel for UNKNOWN / `priorstates: command not found`".**
-> Your Python's build tooling is too old to read modern (`pyproject.toml`)
-> package metadata, so it built an empty `UNKNOWN-0.0.0` package. Fix:
-> ```bash
-> python3 -m pip uninstall -y UNKNOWN
-> python3 -m pip install --user --upgrade pip setuptools wheel
-> python3 -m pip install --user --force-reinstall .
-> python3 -m priorstates doctor
-> ```
-> (`./install.sh` now does this automatically.) If you can't upgrade, just run
-> from the source folder: `cd priorstates && python3 -m priorstates <command>`.
+**hashing embedder**. Run `priorstates init --download-model` (≈127 MB) to upgrade
+to semantic recall.
 
 ## 2. The two surfaces
 
