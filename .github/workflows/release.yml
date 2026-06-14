@@ -258,3 +258,21 @@ jobs:
             echo "  $p -> $code"; [ "$code" = 200 ] || fail=1
           done
           [ "$fail" = 0 ] || { echo "::error::branded /download link not resolving (asset or redirect issue)"; exit 1; }
+
+  # Publish a winget manifest update on each release — a corporate-friendly Windows
+  # channel (often allow-listed even when direct .exe downloads are blocked). Gated
+  # on the WINGET_PUBLISH variable so it auto-skips until the package is FIRST
+  # submitted to microsoft/winget-pkgs by hand (see packaging/winget/README.md);
+  # after that, this opens the per-release update PR automatically.
+  winget:
+    needs: [prep, github-release]
+    if: ${{ vars.WINGET_PUBLISH == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: vedantmgoyal/winget-releaser@v2
+        with:
+          identifier: PriorStates.PriorStates
+          version: ${{ needs.prep.outputs.version }}
+          release-tag: ${{ needs.prep.outputs.tag }}
+          installers-regex: 'PriorStates-[0-9].*-Setup\.exe$'   # the versioned exe, not the -latest alias
+          token: ${{ secrets.WINGET_TOKEN }}
