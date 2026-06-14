@@ -20,11 +20,29 @@ It builds every installer from the recipes in [`packaging/`](../../packaging):
 stable-named copies** (`PriorStates-Setup.exe`, `priorstates-latest.*`) so the
 `releases/latest/download/<name>` URLs are version-free.
 
-**Installers ship unsigned by default** (no secrets required). To code-sign +
-notarize, fill in the secrets named in the commented blocks of `release.yml`
-(Apple Developer ID + App Store Connect key for macOS; an Authenticode cert —
-e.g. free-for-OSS [SignPath](https://signpath.io) — for Windows). Nothing else
-changes.
+**Installers ship unsigned by default.** The Windows job is wired for
+**SignPath** code signing (free for OSS) — it auto-skips until enrolled. macOS
+signing/notarization is a commented block (needs an Apple Developer membership).
+
+### Enable Windows signing (SignPath, free for OSS)
+
+SignPath's cloud HSM signs the built installer and returns it signed — the
+certificate never touches CI. One-time setup:
+
+1. Apply to **[SignPath Foundation](https://signpath.org)** (free OSS program;
+   they review the project).
+2. Install the **SignPath GitHub App** on this repo (used to verify the build's
+   provenance — only artifacts from a trusted CI run get signed).
+3. In SignPath, create a **project** and a **signing policy** (e.g. `priorstates`
+   / `release-signing`).
+4. Add to this repo:
+   - secret **`SIGNPATH_API_TOKEN`**
+   - variable **`SIGNPATH_ORGANIZATION_ID`** (this is what turns the steps on)
+   - optional vars **`SIGNPATH_PROJECT_SLUG`** (default `priorstates`),
+     **`SIGNPATH_SIGNING_POLICY_SLUG`** (default `release-signing`)
+
+The next tagged release then ships a signed `Setup.exe` (Windows SmartScreen
+stops warning once the cert gains reputation). Nothing else changes.
 
 ## Where downloads are served
 

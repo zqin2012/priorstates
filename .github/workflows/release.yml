@@ -137,22 +137,42 @@ jobs:
           $ver = "${{ needs.prep.outputs.version }}"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /Q "/DMyAppVersion=$ver" packaging\windows\priorstates.iss
 
-      # ---- OPTIONAL: Authenticode sign (needs a code-signing cert) ----
-      # Secrets: WINDOWS_CERT_PFX_BASE64 (base64 of the .pfx), WINDOWS_CERT_PASSWORD.
-      # SignPath.io issues free certs for OSS projects if you don't have one.
-      # - name: sign installer
-      #   shell: pwsh
-      #   env:
-      #     PFX: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
-      #     PW:  ${{ secrets.WINDOWS_CERT_PASSWORD }}
-      #   run: |
-      #     [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($env:PFX))
-      #     $st = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe"
-      #     & $st sign /f cert.pfx /p $env:PW /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
-      #       "build\windows\PriorStates-${{ needs.prep.outputs.version }}-Setup.exe"
-
-      - uses: actions/upload-artifact@v4
+      # Upload the (unsigned) installer. This is also the artifact SignPath signs.
+      - name: upload installer artifact
+        id: win_exe
+        uses: actions/upload-artifact@v4
         with: { name: windows, path: build/windows/*.exe, if-no-files-found: error }
+
+      # ---- Code-sign with SignPath (free for OSS) ----
+      # SignPath's cloud HSM signs the artifact above and returns it signed — the
+      # certificate never touches CI. Skips automatically until enrolled, so the
+      # build still works unsigned. One-time setup (see the workflows README):
+      #   1. Apply to SignPath Foundation (https://signpath.org), free for OSS.
+      #   2. Install the SignPath GitHub App on this repo (build provenance).
+      #   3. Create a project + signing policy in SignPath.
+      #   4. Repo secret:  SIGNPATH_API_TOKEN
+      #      Repo vars:    SIGNPATH_ORGANIZATION_ID  (enables these steps)
+      #                    SIGNPATH_PROJECT_SLUG          (default: priorstates)
+      #                    SIGNPATH_SIGNING_POLICY_SLUG   (default: release-signing)
+      - name: sign installer (SignPath)
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'priorstates' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          github-artifact-id: ${{ steps.win_exe.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+      - name: replace artifact with the signed installer
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: signed/*.exe
+          overwrite: true
+          if-no-files-found: error
 
   github-release:
     needs: [prep, linux, macos, windows]
