@@ -160,6 +160,19 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { path: dist, merge-multiple: true }
+      - name: add stable-named copies
+        # These power the version-free `releases/latest/download/<name>` URLs that
+        # priorstates.com/download/ 302-redirects to. Each release carries both the
+        # versioned asset (archival) and a stable copy.
+        env:
+          VER: ${{ needs.prep.outputs.version }}
+        run: |
+          cd dist
+          cp "priorstates-$VER.pkg"          priorstates-latest.pkg        2>/dev/null || true
+          cp "priorstates-$VER.tar.gz"       priorstates-latest.tar.gz     2>/dev/null || true
+          cp "priorstates_${VER}_all.deb"    priorstates-latest.deb        2>/dev/null || true
+          cp "priorstates-$VER-1.noarch.rpm" priorstates-latest.noarch.rpm 2>/dev/null || true
+          cp "PriorStates-$VER-Setup.exe"    PriorStates-Setup.exe         2>/dev/null || true
       - name: checksums
         run: cd dist && sha256sum * > SHA256SUMS
       - name: list
@@ -170,58 +183,18 @@ jobs:
           name: ${{ needs.prep.outputs.tag }}
           generate_release_notes: true
           files: dist/*
-
-  # Mirror the freshly-built installers to priorstates.com/download/ with the
-  # stable aliases (priorstates-latest.*, PriorStates-Setup.exe) and verify every
-  # link resolves. Runs in THIS workflow run (a Release made with GITHUB_TOKEN
-  # would not trigger a separate `on: release` workflow). Gated on deploy secrets
-  # — without them the GitHub Release still publishes; the mirror just skips.
-  mirror-downloads:
-    needs: [prep, github-release]
-    runs-on: ubuntu-latest
-    env:
-      DEPLOY_KEY: ${{ secrets.DOWNLOADS_DEPLOY_KEY }}
-      DL_HOST: ${{ secrets.DOWNLOADS_HOST }}
-    steps:
-      - name: guard — skip if deploy secrets are not set
-        id: g
+      - name: verify branded download links resolve
+        # priorstates.com/download/<name> 302→ this release's stable asset.
+        # No secrets, no mirror — just confirm the public URLs work post-publish.
         run: |
-          if [ -z "$DEPLOY_KEY" ] || [ -z "$DL_HOST" ]; then
-            echo "deploy secrets unset — GitHub Release published, skipping /download/ mirror."
-            echo "go=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "go=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.g.outputs.go == 'true'
-        uses: actions/checkout@v4
-      - name: fetch built installers → build/ layout
-        if: steps.g.outputs.go == 'true'
-        uses: actions/download-artifact@v4
-        with: { path: _dl, merge-multiple: true }
-      - name: arrange + install deploy key
-        if: steps.g.outputs.go == 'true'
-        run: |
-          mkdir -p build/windows
-          shopt -s nullglob
-          for f in _dl/*; do
-            case "$f" in
-              *.exe)                       mv "$f" build/windows/ ;;
-              *.tar.gz|*.deb|*.rpm|*.pkg)  mv "$f" build/ ;;
-            esac
-          done
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/dl_key
-          chmod 600 ~/.ssh/dl_key
-      - name: publish to /download/ + verify links
-        if: steps.g.outputs.go == 'true'
-        run: |
-          export SSH_OPTS="-i $HOME/.ssh/dl_key -o StrictHostKeyChecking=accept-new"
-          bash packaging/publish-downloads.sh "$DL_HOST"
           fail=0
           for p in priorstates-latest.deb priorstates-latest.noarch.rpm \
-                   priorstates-latest.tar.gz priorstates-latest.pkg \
-                   PriorStates-Setup.exe SHA256SUMS; do
-            code="$(curl -s -o /dev/null -w '%{http_code}' -IL "https://priorstates.com/download/$p")"
+                   priorstates-latest.tar.gz priorstates-latest.pkg PriorStates-Setup.exe; do
+            code=000
+            for i in 1 2 3 4; do
+              code="$(curl -s -o /dev/null -w '%{http_code}' -IL "https://priorstates.com/download/$p")"
+              [ "$code" = 200 ] && break || sleep 5
+            done
             echo "  $p -> $code"; [ "$code" = 200 ] || fail=1
           done
-          [ "$fail" = 0 ] || { echo "::error::some /download/ links are not 200"; exit 1; }
+          [ "$fail" = 0 ] || { echo "::error::branded /download link not resolving (asset or redirect issue)"; exit 1; }

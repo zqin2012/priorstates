@@ -16,7 +16,9 @@ It builds every installer from the recipes in [`packaging/`](../../packaging):
 | `macos-latest` | `.pkg` | `packaging/macos/build-pkg.sh` |
 | `windows-latest` | `Setup.exe` | `packaging/windows/priorstates.iss` (Inno Setup) |
 
-…then attaches them all to a GitHub Release with a `SHA256SUMS`.
+…then attaches them all to a GitHub Release with a `SHA256SUMS`, **plus
+stable-named copies** (`PriorStates-Setup.exe`, `priorstates-latest.*`) so the
+`releases/latest/download/<name>` URLs are version-free.
 
 **Installers ship unsigned by default** (no secrets required). To code-sign +
 notarize, fill in the secrets named in the commented blocks of `release.yml`
@@ -24,13 +26,13 @@ notarize, fill in the secrets named in the commented blocks of `release.yml`
 e.g. free-for-OSS [SignPath](https://signpath.io) — for Windows). Nothing else
 changes.
 
-## `publish-downloads.yml` — manual mirror (optional)
+## Where downloads are served
 
-Manually mirrors a release's installers to a self-hosted download area with
-version-free aliases. Gated on deploy secrets (`DOWNLOADS_DEPLOY_KEY`,
-`DOWNLOADS_HOST`); skips cleanly if unset. The normal tag-push release already
-mirrors automatically (the `mirror-downloads` job in `release.yml`), so this is
-only for re-publishing an older release.
+GitHub Releases host the installers. The website keeps branded
+`priorstates.com/download/...` URLs that **302-redirect** to
+`releases/latest/download/<name>` (set once in nginx) — so there is **no mirror
+step and no deploy key in CI**. The last `release.yml` step just curls those
+branded URLs to confirm the new release is reachable.
 
 ## Cutting a release
 
