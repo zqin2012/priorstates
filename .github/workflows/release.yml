@@ -128,6 +128,10 @@ jobs:
           # Empty when the var is unset → build-pkg.sh builds an unsigned .pkg.
           PRIORSTATES_PKG_SIGN_ID:    ${{ vars.APPLE_INSTALLER_IDENTITY }}
           PRIORSTATES_NOTARY_PROFILE: ${{ vars.APPLE_NOTARIZE == 'true' && 'priorstates-notary' || '' }}
+          # Cap on notarytool --wait. A brand-new Apple account's FIRST submission
+          # can take ~1h; later ones are minutes. Bump via the APPLE_NOTARY_TIMEOUT
+          # repo variable (e.g. 90m) if needed; on timeout we ship the signed .pkg.
+          PRIORSTATES_NOTARY_TIMEOUT: ${{ vars.APPLE_NOTARY_TIMEOUT || '60m' }}
         run: bash packaging/macos/build-pkg.sh
       - uses: actions/upload-artifact@v4
         with: { name: macos, path: build/*.pkg, if-no-files-found: error }
