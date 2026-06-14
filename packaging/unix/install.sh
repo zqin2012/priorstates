@@ -23,8 +23,9 @@ for a in "$@"; do
     --no-wire) WIRE=0 ;;
     --lite|--no-model) MODEL=0 ;;
     --uninstall)
-      # Remove the desktop/app launcher via the CLI (one implementation) before
-      # the venv goes away, then drop the venv + bin wrappers.
+      # Unwire the MCP server + pinned block from the user's agents, and remove the
+      # desktop/app launcher, via the CLI (best-effort) BEFORE the venv goes away.
+      "$VENV/bin/priorstates" agents uninstall >/dev/null 2>&1 || true
       "$VENV/bin/priorstates" install-launcher --uninstall >/dev/null 2>&1 || true
       rm -rf "$VENV" "$DATA"
       rm -f "$BIN/priorstates" "$BIN/priorstates-gui"

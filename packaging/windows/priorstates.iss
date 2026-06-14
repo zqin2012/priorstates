@@ -67,6 +67,10 @@ Filename: "{code:GetPyExeW}"; Parameters: "-m priorstates gui"; \
   Description: "Launch PriorStates now"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
+; Cleanly unwire the MCP server + pinned block from the user's AI agents BEFORE
+; removing the package (so the CLI still runs). Best-effort; a no-op if nothing
+; was wired. This makes uninstalling fully reverse what the installer set up.
+Filename: "{code:GetPyExe}"; Parameters: "-m priorstates agents uninstall"; Flags: runhidden; RunOnceId: "AgentsUnwire"
 Filename: "{code:GetPyExe}"; Parameters: "{code:UninstallArgs}"; Flags: runhidden; RunOnceId: "PipUninstall"
 
 [Code]
