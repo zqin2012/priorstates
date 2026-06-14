@@ -54,6 +54,7 @@ Write `~/.priorstates/ai.json` (the desktop app → Connections → AI does this
 // cloud (best quality, but sends content + needs a key):
 { "provider": "anthropic", "model": "claude-3-5-haiku-latest", "api_key": "sk-…" }
 { "provider": "openai",    "model": "gpt-4o-mini",            "api_key": "sk-…" }
+{ "provider": "deepseek",  "model": "deepseek-chat",          "api_key": "sk-…" }  // OpenAI-compatible; deepseek-reasoner for the reasoning tier
 
 // shell out to the Claude Code CLI on this machine (no key in config):
 { "provider": "claude_cli", "command": "claude" }
@@ -65,7 +66,8 @@ at `~/.priorstates/areas/<area>/ai.json`, so each kind of work can use a differe
 ## Privacy
 
 - **ollama / claude_cli:** content stays on the machine.
-- **anthropic / openai:** the question + retrieved memory context are sent to that vendor.
+- **anthropic / openai / deepseek:** the question + retrieved memory context are sent
+  to that vendor (DeepSeek's API is hosted in the PRC — keep sensitive corpora local).
 
 For sensitive corpora (corp email, strategy notes), prefer **local ollama** — it's the
 default whenever it's available.

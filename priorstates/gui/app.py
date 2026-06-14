@@ -1994,7 +1994,7 @@ class PriorStatesGUI:
         line = ttk.Frame(box); line.pack(anchor="w", fill="x")
         tk.Label(line, text="Provider:", bg=BG, fg=DIM, font=(self._fam(), 9)).pack(side="left")
         ttk.Combobox(line, textvariable=prov, width=14, state="readonly",
-                     values=["(off)", "anthropic", "openai", "ollama", "claude_cli"]).pack(side="left", padx=6)
+                     values=["(off)", "anthropic", "openai", "deepseek", "ollama", "claude_cli"]).pack(side="left", padx=6)
 
         def _field(label, key, secret=False):
             ln = ttk.Frame(box); ln.pack(anchor="w", fill="x", pady=(4, 0))
@@ -2003,7 +2003,7 @@ class PriorStatesGUI:
             ttk.Entry(ln, textvariable=v, width=30, show=("*" if secret else "")).pack(side="left", padx=6)
             return v
         model = _field("Model (optional)", "model")
-        apikey = _field("API key (anthropic/openai)", "api_key", secret=True)
+        apikey = _field("API key (anthropic/openai/deepseek)", "api_key", secret=True)
         baseurl = _field("Base URL (ollama/openai-compat)", "base_url")
         note = tk.StringVar(value="")
         tk.Label(box, textvariable=note, bg=BG, fg="#3fb950", font=(self._fam(), 9)).pack(anchor="w", pady=(4, 0))

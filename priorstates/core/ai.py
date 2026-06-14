@@ -4,11 +4,13 @@ The chat answer is synthesized **on this machine** (where the relay agent runs),
 using an AI the user configures in the desktop app — never a key shipped to the
 hub. Config lives in `~/.priorstates/ai.json`:
 
-    {"provider": "anthropic|openai|ollama|claude_cli",
+    {"provider": "anthropic|openai|deepseek|ollama|claude_cli",
      "model": "...", "api_key": "...", "base_url": "...", "command": "claude"}
 
 Providers:
 - anthropic / openai : hosted API over stdlib urllib (api_key required).
+- deepseek           : hosted, OpenAI-compatible API (api_key required); your
+                       context is sent to DeepSeek's servers.
 - ollama            : a local model server (base_url, default localhost:11434).
 - claude_cli        : shell out to the Claude Code CLI on this machine (no key).
 
@@ -30,7 +32,13 @@ from pathlib import Path
 _DEFAULT_MODELS = {
     "anthropic": "claude-3-5-haiku-latest",
     "openai": "gpt-4o-mini",
+    "deepseek": "deepseek-chat",
     "ollama": "llama3.1",
+}
+# OpenAI-compatible hosted providers and their default API base.
+_OPENAI_COMPAT_BASE = {
+    "openai": "https://api.openai.com",
+    "deepseek": "https://api.deepseek.com",
 }
 _SYSTEM = ("You answer the user's question using ONLY the memory and journal context "
            "below. Be concise and specific. If the answer isn't in the context, say you "
@@ -110,7 +118,7 @@ def configured(cfg, ai: dict | None = None) -> bool:
     prov = (ai or {}).get("provider")
     if prov in ("ollama", "claude_cli"):
         return True
-    if prov in ("anthropic", "openai"):
+    if prov in ("anthropic", "openai", "deepseek"):
         return bool(ai.get("api_key"))
     return False
 
@@ -147,8 +155,8 @@ def answer(cfg, question: str, context: str, ai: dict | None = None) -> str:
                        {"x-api-key": ai["api_key"], "anthropic-version": "2023-06-01"})
         return "".join(b.get("text", "") for b in d.get("content", [])).strip()
 
-    if prov == "openai":
-        base = (ai.get("base_url") or "https://api.openai.com").rstrip("/")
+    if prov in ("openai", "deepseek"):
+        base = (ai.get("base_url") or _OPENAI_COMPAT_BASE[prov]).rstrip("/")
         d = _post_json(f"{base}/v1/chat/completions",
                        {"model": model, "messages": [{"role": "system", "content": _SYSTEM},
                                                      {"role": "user", "content": prompt}]},
