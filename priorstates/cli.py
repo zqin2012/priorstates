@@ -39,7 +39,9 @@ def cmd_init(args):
         (pdir / "journal" / "entries").mkdir(parents=True, exist_ok=True)
         if not (pdir / "config.toml").exists():
             (pdir / "config.toml").write_text("# Project overrides for PriorStates.\n", encoding="utf-8")
-        print(f"initialized project scope at {pdir}")
+        print(f"initialized project memory at {pdir}")
+        print("  → memory is global by default; agents running in this folder now also "
+              "recall this project's memory (and new memories save here).")
 
     if args.download_model:
         _download_model(force=getattr(args, "redownload_model", False))
@@ -450,7 +452,7 @@ def cmd_pack(args):
                 print("refusing to import non-interactively without --yes "
                       "(imported memory is used by your agents).", file=sys.stderr)
                 sys.exit(2)
-            if not risky and input("Import into your workspace? [y/N] ").strip().lower() not in ("y", "yes"):
+            if not risky and input("Import into your memory? [y/N] ").strip().lower() not in ("y", "yes"):
                 print("cancelled."); return
         res = share.import_pack(cfg, src)
         msg = f"imported '{res['name']}': +{res['memory_added']} memories"
@@ -843,6 +845,10 @@ def cmd_doctor(args):
     print(f"edition:        {reg.edition}" + (f"  (plugins: {', '.join(reg.plugins)})" if reg.plugins else ""))
     print(f"home:           {cfg.home}")
     print(f"project_root:   {cfg.project_root}")
+    if cfg.project_root:
+        print(f"memory scope:   project + global  (new memories save to the project: {cfg.project_root})")
+    else:
+        print("memory scope:   global  (run `priorstates init` inside a repo to add a project layer)")
     print(f"journal_dir:    {cfg.journal_dir}")
     emb = get_embedder(cfg)
     print(f"embedder:       {getattr(emb, 'backend', '?')} (dim={emb.dim})")
@@ -1335,7 +1341,7 @@ def build_parser():
     we.add_argument("--sign", action="store_true", help="sign the manifest with your publisher key (needs the `sign` extra)")
     wi = pws.add_parser("import", help="import a .pspack file or URL (or --demo)")
     wi.add_argument("source", nargs="?", help="path or http(s) URL to a .pspack")
-    wi.add_argument("--demo", action="store_true", help="import the bundled demo workspace")
+    wi.add_argument("--demo", action="store_true", help="import the bundled demo project")
     wi.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     wi.add_argument("--allow-flagged", action="store_true", help="import even if the injection scanner flags content")
     wl = pws.add_parser("install", help="install a workspace from a URL (alias for import)")

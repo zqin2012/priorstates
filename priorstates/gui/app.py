@@ -682,13 +682,18 @@ class PriorStatesGUI:
         if hasattr(self, "jr_outcome_cb"):
             self.jr_outcome_cb.configure(values=self.cfg.outcomes)
 
-    # ----- left workspace-tab sidebar ---------------------------------- #
+    # ----- left project-tab sidebar ------------------------------------ #
     def _rebuild_sidebar(self):
         tk, ttk = self.tk, self.ttk
         for w in self.sidebar.winfo_children():
             w.destroy()
-        ttk.Label(self.sidebar, text="WORKSPACES", style="SideHdr.TLabel").pack(
-            fill="x", padx=14, pady=(14, 6))
+        ttk.Label(self.sidebar, text="PROJECTS", style="SideHdr.TLabel").pack(
+            fill="x", padx=14, pady=(14, 2))
+        # Clarify the global/project model right where projects are picked.
+        ttk.Label(self.sidebar,
+                  text="Each project keeps its own memory plus the shared global memory.",
+                  style="Dim.TLabel", wraplength=180, justify="left").pack(
+            fill="x", padx=14, pady=(0, 8))
         lst = ttk.Frame(self.sidebar, style="Sidebar.TFrame")
         lst.pack(fill="both", expand=True)
         for ws in self.projects:

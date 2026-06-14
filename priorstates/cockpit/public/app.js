@@ -77,7 +77,14 @@ async function boot() {
     api('/api/memory').catch((e) => (console.error('cockpit /api/memory failed', e), [])),
     api('/api/docs').catch((e) => (console.error('cockpit /api/docs failed', e), { count: 0 })),
   ]);
-  $('#rootlbl').textContent = meta.project_root || meta.home || '';
+  // Scope badge: make it obvious whether you're in global or a project, and
+  // where new memories will save.
+  const _rl = $('#rootlbl'), _proj = meta.project_root || '';
+  if (_rl) {
+    _rl.textContent = _proj ? ('Project: ' + _proj.replace(/[\\/]+$/, '').split(/[\\/]/).pop()) : 'Global memory';
+    _rl.title = _proj ? (_proj + '\nProject memory + global; new memories save to this project.')
+                      : ((meta.home || '') + '\nGlobal memory; new memories save here. (Run `priorstates init` in a repo to add a project layer.)');
+  }
   state.journal = journal; state.memory = memory; state.docs = docs; state.meta = meta;
   $('#cnt-journal').textContent = `(${journal.length})`;
   $('#cnt-memory').textContent = `(${memory.length})`;
@@ -148,7 +155,7 @@ function renderWorkspaceOpen() {
   const eds = editorsAvailable();
   if (!eds || !(state.meta || {}).project_root) return;
   for (const ed of eds) {
-    host.append(el('button', { class: 'wsbtn', title: `Open the workspace folder in ${ed.label}`,
+    host.append(el('button', { class: 'wsbtn', title: `Open the project folder in ${ed.label}`,
       onclick: () => doOpen(ed.bin) }, '📂 ' + ed.label));
   }
 }
@@ -209,7 +216,7 @@ async function loadDemo(e) {
   const b = e && e.currentTarget;
   if (b) { b.disabled = true; b.textContent = 'loading…'; }
   const r = await post('/api/workspace/import-demo', {});
-  if (r && r.error) { alert('Load failed: ' + r.error); if (b) { b.disabled = false; b.textContent = '🛰 Load the demo workspace'; } return; }
+  if (r && r.error) { alert('Load failed: ' + r.error); if (b) { b.disabled = false; b.textContent = '🛰 Load the demo project'; } return; }
   await reload();
 }
 function placeholder() {
@@ -218,8 +225,8 @@ function placeholder() {
   const m = state.meta || {};
   // First run: empty + writable → offer the bundled demo workspace.
   if (m.allow_write && !state.journal.length && !state.memory.length) {
-    const box = el('div', { class: 'placeholder' }, ['New here? Load a sample workspace to see PriorStates populated.']);
-    box.append(el('div', { class: 'ph-open' }, [el('button', { class: 'wsbtn', onclick: loadDemo }, '🛰 Load the demo workspace')]));
+    const box = el('div', { class: 'placeholder' }, ['New here? Load a sample project to see PriorStates populated.']);
+    box.append(el('div', { class: 'ph-open' }, [el('button', { class: 'wsbtn', onclick: loadDemo }, '🛰 Load the demo project')]));
     c.append(box);
     return;
   }
@@ -227,7 +234,7 @@ function placeholder() {
   const eds = editorsAvailable();
   if (eds && (state.meta || {}).project_root) {
     const row = el('div', { class: 'ph-open' });
-    row.append(el('span', { class: 'ph-lbl' }, 'Open the workspace in:'));
+    row.append(el('span', { class: 'ph-lbl' }, 'Open the project in:'));
     for (const ed of eds) {
       row.append(el('button', { class: 'wsbtn', onclick: () => doOpen(ed.bin) }, '📂 ' + ed.label));
     }

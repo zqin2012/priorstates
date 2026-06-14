@@ -134,6 +134,25 @@ covered automatically; **Claude Desktop** (its own app) is wired into
 `claude_desktop_config.json` too. Every client on the machine reads the *same*
 local store, so a memory saved in one is instantly recalled in all the others.
 
+## Global vs project memory
+
+PriorStates keeps **one global memory** plus an optional **per-project layer** —
+and which one your agent uses follows its **working directory**, automatically:
+
+- **Anywhere** (no project) → the **global** store in `~/.priorstates/`. This is
+  what you get right after installing.
+- **Inside a project** you've set up with `priorstates init` (it creates a
+  `.priorstates/` folder in that repo) → that **project's** memory *plus* global,
+  merged when recalling. New memories save to the **project** by default, so
+  project-specific facts stay with the project and global facts stay global.
+
+The whole rule is: **memory follows the directory your agent runs in.** Run an
+agent in a repo that has a `.priorstates/` and it sees that project; run it
+elsewhere and it sees global. The desktop app's **Projects** list is just a
+convenient way to pick which project to browse and to launch an agent in — it
+doesn't change the rule. (To check where you are: `priorstates doctor`, or the
+scope badge in the cockpit.)
+
 ## Private by default
 
 Everything lives under `~/.priorstates/` and per-project `.priorstates/`. The
