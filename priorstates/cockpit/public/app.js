@@ -66,15 +66,23 @@ const state = { view: 'journal', journal: [], memory: [], docs: { groups: {}, co
 const nav = { seq: -1, max: -1 };
 
 async function boot() {
-  const [meta, journal, memory, docs] = await Promise.all(
-    [api('/api/meta'), api('/api/journal'), api('/api/memory'), api('/api/docs')]);
-  $('#rootlbl').textContent = meta.project_root || meta.home;
+  // Wire the tabs + nav FIRST so the UI stays interactive even if a data endpoint
+  // errors or hangs. (Previously bind() ran only after awaiting four /api/* calls,
+  // so a single failing endpoint aborted boot() and left every tab dead.)
+  bind();
+  let meta = {}, journal = [], memory = [], docs = { count: 0 };
+  [meta, journal, memory, docs] = await Promise.all([
+    api('/api/meta').catch((e) => (console.error('cockpit /api/meta failed', e), {})),
+    api('/api/journal').catch((e) => (console.error('cockpit /api/journal failed', e), [])),
+    api('/api/memory').catch((e) => (console.error('cockpit /api/memory failed', e), [])),
+    api('/api/docs').catch((e) => (console.error('cockpit /api/docs failed', e), { count: 0 })),
+  ]);
+  $('#rootlbl').textContent = meta.project_root || meta.home || '';
   state.journal = journal; state.memory = memory; state.docs = docs; state.meta = meta;
   $('#cnt-journal').textContent = `(${journal.length})`;
   $('#cnt-memory').textContent = `(${memory.length})`;
-  $('#cnt-docs').textContent = `(${docs.count})`;
+  $('#cnt-docs').textContent = `(${(docs && docs.count) || 0})`;
   if (meta.allow_terminal) { const tt = $('#tab-term'); if (tt) tt.hidden = false; }
-  bind();
   renderWorkspaceOpen();
   render();
   placeholder();   // dynamic empty state (incl. workspace-open buttons)
