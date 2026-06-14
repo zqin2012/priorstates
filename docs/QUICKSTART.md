@@ -27,8 +27,11 @@ priorstates agents install          # wire Claude Code / Codex / Gemini / Copilo
 `PATH`.
 
 No model download is required: memory works immediately with a built-in
-**hashing embedder**. Run `priorstates init --download-model` (≈127 MB) to upgrade
-to semantic recall.
+**hashing embedder** (Unicode-aware — it gives lexical recall in any language,
+including CJK, with no download). Run `priorstates init --download-model` (≈127 MB)
+to upgrade to semantic recall. Working in non-English? Add `--multilingual`
+(`priorstates init --download-model --multilingual`, ~130 MB) for a 50+-language
+model with cross-lingual recall (e.g. an English query finds a Chinese note).
 
 ## 2. The two surfaces
 

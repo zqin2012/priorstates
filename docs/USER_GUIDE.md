@@ -34,10 +34,13 @@ native installers for macOS / Windows / Linux (all per-user, no admin), or
 `python3 -m priorstates …` always works regardless of PATH; the `priorstates` command
 also works once the user scripts dir (e.g. `~/.local/bin`) is on PATH.
 
-Memory works immediately with a built-in **hashing embedder** — no download.
-For semantic recall: `priorstates init --download-model` (~127 MB). For agent (MCP)
-integration: install the `mcp` extra (`pip install --user mcp`, or the `[full]`
-extra / the package's Recommends).
+Memory works immediately with a built-in **hashing embedder** — no download. It's
+Unicode-aware, so it gives lexical recall in any language (incl. CJK) out of the box.
+For semantic recall: `priorstates init --download-model` (~127 MB, English). For
+non-English work add `--multilingual` (~130 MB) for a 50+-language model with
+cross-lingual recall (an English query matches a Chinese/Russian/… memory). For
+agent (MCP) integration: install the `mcp` extra (`pip install --user mcp`, or the
+`[full]` extra / the package's Recommends).
 
 First-time setup:
 

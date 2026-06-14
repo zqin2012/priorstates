@@ -44,7 +44,8 @@ def cmd_init(args):
               "recall this project's memory (and new memories save here).")
 
     if args.download_model:
-        _download_model(force=getattr(args, "redownload_model", False))
+        _download_model(force=getattr(args, "redownload_model", False),
+                        multilingual=getattr(args, "multilingual", False))
 
     # Install-and-forget: wire every DETECTED agent by default, so one `init`
     # gives all AI tools on the machine the shared memory. Opt out: --no-wire.
@@ -67,6 +68,51 @@ def cmd_init(args):
 
 MODEL_FILES = ["onnx/model.onnx", "tokenizer.json", "config.json",
                "tokenizer_config.json", "vocab.txt", "special_tokens_map.json"]
+
+# Selectable embedding models. The English bge model is the default (smaller,
+# best-in-class on English); the multilingual model (--multilingual) covers
+# 50+ languages with cross-lingual recall. Both are 384-dim, so the .psmem
+# format and index dimension are identical — switching just needs a reindex.
+# `onnx_src` is the remote ONNX filename; it's always saved locally as
+# onnx/model.onnx so the embedder finds it uniformly.
+_MODELS = {
+    "en": {
+        "dir": "bge-small-en-v1.5",
+        "repo": "BAAI/bge-small-en-v1.5",
+        "onnx_src": "onnx/model.onnx",
+        "aux": ["tokenizer.json", "config.json", "tokenizer_config.json",
+                "vocab.txt", "special_tokens_map.json"],
+        "use_mirror": True,          # priorstates.com mirror serves this one
+        "size": "~127 MB",
+    },
+    "multi": {
+        "dir": "paraphrase-multilingual-MiniLM-L12-v2",
+        "repo": "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
+        "onnx_src": "onnx/model_quantized.onnx",   # int8 — ~130 MB total
+        "aux": ["tokenizer.json", "config.json", "tokenizer_config.json",
+                "special_tokens_map.json"],        # XLM-R: sentencepiece, no vocab.txt
+        "use_mirror": False,         # HF only
+        "size": "~130 MB",
+    },
+}
+
+
+def _set_active_model(name: str) -> None:
+    """Point [core] model at `name` in the global config.toml so the embedder
+    loads it. Hand-edits the line (no TOML writer in stdlib)."""
+    import re
+    p = home_dir() / "config.toml"
+    try:
+        txt = p.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        txt = DEFAULT_CONFIG_TOML
+    if re.search(r"(?m)^\s*model\s*=", txt):
+        txt = re.sub(r"(?m)^(\s*model\s*=).*$", rf'\1 "{name}"', txt, count=1)
+    elif "[core]" in txt:
+        txt = txt.replace("[core]", f'[core]\nmodel = "{name}"', 1)
+    else:
+        txt = f'[core]\nmodel = "{name}"\n' + txt
+    p.write_text(txt, encoding="utf-8")
 
 
 def _http_download(url: str, out: Path, retries: int = 3):
@@ -109,57 +155,63 @@ def _http_download(url: str, out: Path, retries: int = 3):
     raise last_err
 
 
-def _model_present(dest: Path) -> bool:
-    """True iff every model file is already on disk and the ONNX weights look
-    complete (not a truncated/partial download)."""
+def _model_present(dest: Path, aux: list[str] | None = None) -> bool:
+    """True iff the model files are on disk and the ONNX weights look complete
+    (not a truncated/partial download). `aux` defaults to the English file set."""
     onnx = dest / "onnx" / "model.onnx"
+    aux = aux if aux is not None else MODEL_FILES[1:]
     return (onnx.exists() and onnx.stat().st_size > 1_000_000
-            and all((dest / rel).exists() for rel in MODEL_FILES))
+            and all((dest / rel).exists() for rel in aux))
 
 
-def _download_model(force: bool = False):
+def _download_model(force: bool = False, multilingual: bool = False):
     home = home_dir()
-    dest = home / "models" / "bge-small-en-v1.5"
+    spec = _MODELS["multi" if multilingual else "en"]
+    name = spec["dir"]
+    dest = home / "models" / name
+    # The onnx source filename may differ from the local target (e.g. the
+    # multilingual int8 file); always land it at onnx/model.onnx.
+    rels = [(spec["onnx_src"], "onnx/model.onnx")] + [(a, a) for a in spec["aux"]]
 
-    # Already here? Don't re-fetch ~127 MB on every re-run / upgrade — the
-    # installers call this unconditionally. `--force` (or deleting the dir)
-    # re-downloads. We still fall through to the enable/reindex tail below so a
-    # newly-installed onnxruntime gets picked up.
-    if _model_present(dest) and not force:
+    # Already here? Don't re-fetch on every re-run / upgrade — the installers
+    # call this unconditionally. `--force` (or deleting the dir) re-downloads.
+    # We still fall through to the enable/reindex tail so a newly-installed
+    # onnxruntime gets picked up.
+    if _model_present(dest, spec["aux"]) and not force:
         print(f"semantic model already present at {dest} (skipping download).")
     else:
-        repo = os.environ.get("PRIORSTATES_HF_REPO", "BAAI/bge-small-en-v1.5")
-        # Sources tried IN ORDER. priorstates.com is the configured primary; it
-        # currently 302-redirects to HuggingFace (mirror serving is off to save
-        # egress) — the client follows the redirect transparently. HF is also the
-        # explicit fallback. Override the primary with PRIORSTATES_MODEL_BASE.
-        # `<base>/bge-small-en-v1.5/<rel>` is the layout.
-        mirror = os.environ.get("PRIORSTATES_MODEL_BASE",
-                                "https://priorstates.com/download/models")
+        repo = os.environ.get("PRIORSTATES_HF_REPO", spec["repo"]) if not multilingual else spec["repo"]
         hf_base = os.environ.get("PRIORSTATES_HF_BASE", "https://huggingface.co")
-        sources = [
-            ("priorstates.com", lambda rel: f"{mirror}/bge-small-en-v1.5/{rel}"),
-            ("huggingface.co",  lambda rel: f"{hf_base}/{repo}/resolve/main/{rel}"),
-        ]
-        print(f"downloading bge-small-en-v1.5 -> {dest} (~127 MB)...")
+        sources = []
+        if spec["use_mirror"]:
+            # priorstates.com is the configured primary for the English model; it
+            # 302-redirects to HuggingFace. Override with PRIORSTATES_MODEL_BASE.
+            mirror = os.environ.get("PRIORSTATES_MODEL_BASE",
+                                    "https://priorstates.com/download/models")
+            sources.append(("priorstates.com", lambda src: f"{mirror}/{name}/{src}"))
+        sources.append(("huggingface.co", lambda src: f"{hf_base}/{repo}/resolve/main/{src}"))
+        print(f"downloading {name} -> {dest} ({spec['size']})...")
 
         ok = False
         last_err = None
-        for name, url_for in sources:
+        for src_name, url_for in sources:
             try:
-                for rel in MODEL_FILES:
-                    _http_download(url_for(rel), dest / rel)
+                for src, target in rels:
+                    _http_download(url_for(src), dest / target)
                 ok = True
                 break
             except Exception as e:  # noqa: BLE001
                 last_err = e
-                print(f"  source {name} failed ({e}); trying next...")
+                print(f"  source {src_name} failed ({e}); trying next...")
 
         if not ok:
             # Last resort: huggingface_hub if installed (resumable).
             try:
                 from huggingface_hub import snapshot_download
-                snapshot_download(repo, local_dir=str(dest), allow_patterns=MODEL_FILES)
+                patterns = [spec["onnx_src"], *spec["aux"]]
+                snapshot_download(repo, local_dir=str(dest), allow_patterns=patterns)
+                if spec["onnx_src"] != "onnx/model.onnx":
+                    (dest / spec["onnx_src"]).replace(dest / "onnx" / "model.onnx")
                 ok = True
             except Exception as e:  # noqa: BLE001
                 last_err = e
@@ -167,15 +219,19 @@ def _download_model(force: bool = False):
         if not ok:
             print(f"\ncould not download model ({last_err}).")
             print(f"  Check your network, or place the ONNX model + tokenizer under {dest}/ "
-                  f"manually (files: {', '.join(MODEL_FILES)}).")
+                  f"manually (files: onnx/model.onnx, {', '.join(spec['aux'])}).")
             print("  The hashing fallback keeps working meanwhile; re-run "
                   "`priorstates init --download-model` to retry.")
             return
 
-        if not _model_present(dest):
+        if not _model_present(dest, spec["aux"]):
             print("model files look incomplete -- re-run `priorstates init --download-model`.")
             return
         print("model files installed.")
+
+    # Make this the active model so the embedder loads it (English <-> multilingual
+    # are both 384-dim; the reindex below rebuilds vectors in the new space).
+    _set_active_model(name)
 
     # Semantic recall also needs the inference libraries.
     missing = [m for m in ("onnxruntime", "tokenizers") if not _importable(m)]
@@ -1239,6 +1295,9 @@ def build_parser():
     pi.add_argument("path", nargs="?", help="project root (default: cwd)")
     pi.add_argument("--global-only", action="store_true")
     pi.add_argument("--download-model", action="store_true", help="fetch the ONNX embedding model (skips if already present)")
+    pi.add_argument("--multilingual", action="store_true",
+                    help="with --download-model: fetch the multilingual model (~130 MB, 50+ "
+                         "languages with cross-lingual recall) instead of the English-only model")
     pi.add_argument("--redownload-model", dest="redownload_model", action="store_true",
                     help="with --download-model: re-fetch even if the model is already present")
     pi.add_argument("--no-wire", action="store_true",

@@ -2,13 +2,14 @@
 
 Three backends, selected by :func:`get_embedder`:
 
-  * :class:`OnnxEmbedder`   — real semantic vectors (bge-small) when the model
-                              files are present. Needs onnxruntime + tokenizers.
+  * :class:`OnnxEmbedder`   — real semantic vectors when the model files are
+                              present (bge-small for English, or the multilingual
+                              model). Needs onnxruntime + tokenizers.
   * :class:`DaemonEmbedder` — socket client for a resident OnnxEmbedder.
   * :class:`HashingEmbedder`— **dependency-free fallback** (numpy only). Hashes
-                              word + character-trigram features into a fixed
-                              vector so lexically similar texts score higher.
-                              No download, no model — usable on first run.
+                              word + character-trigram features (Unicode/CJK-aware)
+                              into a fixed vector so lexically similar texts score
+                              higher in any language. No download — usable on first run.
 
 All backends return L2-normalized ``(N, dim)`` float32 with ``dim == 384`` so
 the ``.psmem`` format is identical regardless of backend.
@@ -93,6 +94,18 @@ class HashingEmbedder:
 # --------------------------------------------------------------------------- #
 # ONNX (real semantic)
 # --------------------------------------------------------------------------- #
+# Per-model inference config, keyed by the model directory name. Models not
+# listed fall back to the bge defaults (CLS pooling, [PAD]/0) — so adding a model
+# is purely additive. bge uses CLS pooling; sentence-transformers multilingual
+# models (XLM-R based) use masked-mean pooling and pad with <pad>/1.
+_MODEL_META = {
+    "bge-small-en-v1.5": {"pooling": "cls", "pad_id": 0, "pad_token": "[PAD]"},
+    "paraphrase-multilingual-MiniLM-L12-v2":
+        {"pooling": "mean", "pad_id": 1, "pad_token": "<pad>"},
+}
+_DEFAULT_META = {"pooling": "cls", "pad_id": 0, "pad_token": "[PAD]"}
+
+
 class OnnxEmbedder:
     backend = "onnx"
 
@@ -105,6 +118,8 @@ class OnnxEmbedder:
         tok_path = model_dir / "tokenizer.json"
         if not onnx_path.exists() or not tok_path.exists():
             raise FileNotFoundError(f"model not found under {model_dir}")
+        meta = _MODEL_META.get(model_dir.name, _DEFAULT_META)
+        self.pooling = meta["pooling"]
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = max(1, (os.cpu_count() or 4) // 2)
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -112,7 +127,7 @@ class OnnxEmbedder:
                                             providers=["CPUExecutionProvider"])
         self.tokenizer = Tokenizer.from_file(str(tok_path))
         self.tokenizer.enable_truncation(max_length=max_len)
-        self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
+        self.tokenizer.enable_padding(pad_id=meta["pad_id"], pad_token=meta["pad_token"])
         self.dim = DEFAULT_DIM
         self.input_names = {i.name for i in self.session.get_inputs()}
 
@@ -129,9 +144,13 @@ class OnnxEmbedder:
             if "token_type_ids" in self.input_names:
                 feed["token_type_ids"] = np.zeros_like(ids)
             (last_hidden,) = self.session.run(["last_hidden_state"], feed)
-            cls = last_hidden[:, 0, :]
-            norms = np.linalg.norm(cls, axis=1, keepdims=True) + 1e-12
-            out[i:i + len(chunk)] = (cls / norms).astype(np.float32)
+            if self.pooling == "mean":
+                m = mask[:, :, None].astype(np.float32)          # masked mean
+                pooled = (last_hidden * m).sum(axis=1) / np.clip(m.sum(axis=1), 1e-9, None)
+            else:
+                pooled = last_hidden[:, 0, :]                    # CLS token
+            norms = np.linalg.norm(pooled, axis=1, keepdims=True) + 1e-12
+            out[i:i + len(chunk)] = (pooled / norms).astype(np.float32)
         return out
 
     def embed_one(self, text: str) -> np.ndarray:
