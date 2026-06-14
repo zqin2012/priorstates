@@ -6,19 +6,12 @@ plus a **desktop GUI** to manage it all. Everything runs on your machine.
 
 ## 1. Install
 
-Grab an installer for your OS at **<https://priorstates.com/install>** — all
-**per-user, no root/admin**:
-
-- **Linux** — `.deb`/`.rpm` (app-menu launcher; uses `sudo`), or the no-root one-liner.
-- **macOS** — the `.pkg` ("install for me only" — no admin password; signed & notarized).
-- **Windows** — `Setup.exe` (no admin), or `pipx install priorstates` if `.exe` is blocked.
-
-Or use Python directly (any OS, no installer):
+Native installers (macOS / Windows / Linux — all per-user, no admin) and every
+other option are in the **[install guide](https://priorstates.com/install)**. The
+shortest path on any OS with Python 3.10+:
 
 ```bash
 pip install -U priorstates          # or: pipx install priorstates
-# …or one command on Linux/macOS (installs, initializes, wires agents):
-curl -fsSL https://priorstates.com/install.sh | sh
 ```
 
 Then initialize and wire your agents:

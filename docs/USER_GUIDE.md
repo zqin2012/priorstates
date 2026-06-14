@@ -27,15 +27,9 @@ short version). One-click native installers — macOS / Windows / Linux — are 
 
 ## 1. Install
 
-One-click native installers (recommended for end users) — macOS `.pkg`,
-Windows `.exe`, Linux `.deb`/`.rpm`/`.tar.gz`, all per-user (no admin) — are at
-**https://priorstates.com/download**.
-
-Or via pip (any OS with Python 3.10+):
-
-```bash
-pip install -U priorstates          # or: pipx install priorstates
-```
+Get PriorStates from the **[install guide](https://priorstates.com/install)** —
+native installers for macOS / Windows / Linux (all per-user, no admin), or
+`pip install -U priorstates` / `pipx install priorstates` (any OS with Python 3.10+).
 
 `python3 -m priorstates …` always works regardless of PATH; the `priorstates` command
 also works once the user scripts dir (e.g. `~/.local/bin`) is on PATH.

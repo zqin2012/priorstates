@@ -24,8 +24,9 @@ Repository: <https://github.com/priorstates-dev/priorstates>
 If Python >= 3.10 is missing:
 - **Windows** -- don't worry about it: use the **Setup.exe** in Step 1, which
   installs Python for you automatically.
-- **Linux / macOS** -- tell the human and stop; don't silently install a system
-  Python.
+- **Linux (Debian/Ubuntu)** -- don't worry about it: the **`.deb`** in Step 1
+  declares `python3` as a dependency, so `apt` pulls a suitable Python in for you.
+- **macOS** -- tell the human and stop; don't silently install a system Python.
 
 On the commands below, use `python3` on Linux/macOS and `py` on Windows.
 
@@ -35,8 +36,8 @@ On the commands below, use `python3` on Linux/macOS and `py` on Windows.
 
 **Windows -- use the Setup.exe (it installs Python for you, no prerequisites):**
 ```powershell
-$exe = "$env:TEMP\PriorStates-Windows-Setup.exe"
-Invoke-WebRequest -UseBasicParsing https://github.com/priorstates-dev/priorstates/releases/latest/download/PriorStates-Windows-Setup.exe -OutFile $exe
+$exe = "$env:TEMP\PriorStates-Setup.exe"
+Invoke-WebRequest -UseBasicParsing https://priorstates.com/download/PriorStates-Setup.exe -OutFile $exe
 Start-Process -Wait $exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
 ```
 In silent mode this does **everything**: auto-installs Python 3.12 if none is
@@ -47,18 +48,40 @@ the agent. (If `doctor` shows an agent `registered=False`, run Step 2's `agents
 install`. If the human already has Python 3.10+ and prefers pip, use the
 Linux/macOS commands below with `py` instead of `python3`.)
 
-**Linux / macOS -- install straight from the repo (no clone):**
+**Linux (Debian / Ubuntu) -- install the `.deb` (pulls `python3` + `numpy` for you):**
 ```bash
-python3 -m pip install --user --upgrade pip setuptools wheel
-python3 -m pip install --user --no-cache-dir "priorstates @ git+https://github.com/priorstates-dev/priorstates.git"
+deb="$(mktemp --suffix=.deb)"
+curl -fSL https://priorstates.com/download/priorstates-latest.deb -o "$deb"
+sudo apt install -y "$deb"          # resolves python3 (>= 3.10) and python3-numpy
 ```
-`--no-cache-dir` matters: the package version is static (`0.1.0`), so without it
-pip can reuse a **stale cached wheel** from an earlier commit and silently install
-old code. To **update** an existing install, add `--force-reinstall`:
+**Linux (RHEL / Rocky / Alma / Fedora) -- install the `.rpm`** (one noarch package;
+on EL9 it pulls `python3.12` automatically):
 ```bash
-python3 -m pip install --user --no-cache-dir --force-reinstall "priorstates @ git+https://github.com/priorstates-dev/priorstates.git"
+rpm="$(mktemp --suffix=.rpm)"
+curl -fSL https://priorstates.com/download/priorstates-latest.noarch.rpm -o "$rpm"
+sudo dnf install -y "$rpm"
 ```
+Either package installs the `priorstates` / `priorstates-gui` commands system-wide,
+plus a desktop launcher, an icon and man pages -- so **Step 4 is already done**.
+Re-running the same install upgrades an existing one. For the agent (MCP) wiring in
+Step 2 and semantic recall, also install the extras (on RHEL/Rocky/Alma 9 use
+`python3.12 -m pip`):
+```bash
+PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --user mcp onnxruntime tokenizers
+```
+(If `pip3` is missing: `sudo apt install -y python3-pip` first. The env var
+satisfies PEP 668 on Ubuntu 23.04+/Debian 12+ — the install stays in `~/.local`;
+older pip ignores it.)
 Then continue to **Step 2**.
+
+**macOS -- the native `.pkg` (no admin) or pip:**
+```bash
+# Native installer (recommended): grab the .pkg from https://priorstates.com/download
+# and double-click — "install for me only", no admin password.
+# Or via pip, any OS with Python 3.10+ (the PEP 668 env var is ignored by older pip):
+PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --user -U priorstates
+```
+Re-run with `-U` to update. Then continue to **Step 2**.
 
 ### Method B -- clone the repo + run the installer (keeps the source; supports extras)
 
@@ -99,6 +122,10 @@ Expect config, backend, and agent status to report OK. If you see
 
 ## Step 4 -- create the desktop launcher (so the user can click to open the GUI)
 
+> **Skip this on Linux if you installed the `.deb`** -- the package already ships
+> the **PriorStates** application-menu entry and icon. Run the command below only
+> after a bare pip install.
+
 Linux / macOS:
 ```bash
 python3 -m priorstates install-launcher --desktop
@@ -138,6 +165,13 @@ Tell them, concisely:
 
 ## Notes
 
+- **Global vs project memory.** Memory follows the agent's working directory:
+  **global** (`~/.priorstates/`) everywhere by default, **plus** a project's own
+  layer when the agent runs inside a repo where you ran `priorstates init` (it
+  creates a `.priorstates/` folder there). Inside a project, recall merges
+  project + global and new memories save to the project. Check the current scope
+  with `priorstates doctor`. The desktop app's **Projects** list just picks which
+  project to launch an agent in -- it doesn't change this rule.
 - **No Node.js needed.** The entire product -- memory, journal, MCP server, CLI,
   desktop GUI, and the web cockpit -- is pure Python. The only hard dependency is
   `numpy`.
