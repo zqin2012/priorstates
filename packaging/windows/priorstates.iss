@@ -221,8 +221,8 @@ begin
   DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing),
                                      SetupMessage(msgPreparingDesc), nil);
   ProgressPage := CreateOutputProgressPage('Setting up PriorStates',
-    'Installing into your Python.' +
-    #13#10 + 'This can take a few minutes; please leave the window open.');
+    'Installing into your Python.' + #13#10 +
+    'This can take a few minutes; please leave the window open.');
 end;
 
 { Detect Python; if absent, download + silently install it (per-user). Returns
