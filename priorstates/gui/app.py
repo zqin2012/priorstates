@@ -1550,7 +1550,7 @@ class PriorStatesGUI:
         self.run_bg(work, done)
 
     # Reinstall the latest PriorStates from GitHub (the pip-from-git path).
-    REPO_URL = "git+https://github.com/zqin2012/priorstates.git"
+    REPO_URL = "git+https://github.com/priorstates-dev/priorstates.git"
 
     def _build_menubar(self):
         """A native menu bar — Help → About / Check for updates. (No menu existed

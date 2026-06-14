@@ -11,7 +11,7 @@
 PriorStates gives AI agents a shared **local memory**, a durable **research
 journal**, and a **web cockpit**, wired into Claude / Codex / Gemini over the MCP
 protocol. It runs entirely on the user's machine, CPU-only.
-Repository: <https://github.com/zqin2012/priorstates>
+Repository: <https://github.com/priorstates-dev/priorstates>
 
 ## Preconditions -- check these first
 
@@ -36,7 +36,7 @@ On the commands below, use `python3` on Linux/macOS and `py` on Windows.
 **Windows -- use the Setup.exe (it installs Python for you, no prerequisites):**
 ```powershell
 $exe = "$env:TEMP\PriorStates-Windows-Setup.exe"
-Invoke-WebRequest -UseBasicParsing https://github.com/zqin2012/priorstates/releases/latest/download/PriorStates-Windows-Setup.exe -OutFile $exe
+Invoke-WebRequest -UseBasicParsing https://github.com/priorstates-dev/priorstates/releases/latest/download/PriorStates-Windows-Setup.exe -OutFile $exe
 Start-Process -Wait $exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
 ```
 In silent mode this does **everything**: auto-installs Python 3.12 if none is
@@ -50,20 +50,20 @@ Linux/macOS commands below with `py` instead of `python3`.)
 **Linux / macOS -- install straight from the repo (no clone):**
 ```bash
 python3 -m pip install --user --upgrade pip setuptools wheel
-python3 -m pip install --user --no-cache-dir "priorstates @ git+https://github.com/zqin2012/priorstates.git"
+python3 -m pip install --user --no-cache-dir "priorstates @ git+https://github.com/priorstates-dev/priorstates.git"
 ```
 `--no-cache-dir` matters: the package version is static (`0.1.0`), so without it
 pip can reuse a **stale cached wheel** from an earlier commit and silently install
 old code. To **update** an existing install, add `--force-reinstall`:
 ```bash
-python3 -m pip install --user --no-cache-dir --force-reinstall "priorstates @ git+https://github.com/zqin2012/priorstates.git"
+python3 -m pip install --user --no-cache-dir --force-reinstall "priorstates @ git+https://github.com/priorstates-dev/priorstates.git"
 ```
 Then continue to **Step 2**.
 
 ### Method B -- clone the repo + run the installer (keeps the source; supports extras)
 
 ```bash
-git clone https://github.com/zqin2012/priorstates.git
+git clone https://github.com/priorstates-dev/priorstates.git
 cd priorstates
 ./install.sh --wire          # Linux/macOS: install + init + wire agents
 # Windows instead:

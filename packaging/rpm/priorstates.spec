@@ -17,7 +17,7 @@ Version:        %{ver}
 Release:        1
 Summary:        Shared AI memory, research journal & cockpit for AI agents
 License:        Apache-2.0
-URL:            https://github.com/zqin2012/priorstates
+URL:            https://github.com/priorstates-dev/priorstates
 BuildArch:      noarch
 # Manual deps only: the automatic python dependency generator would emit
 # python3dist(...) requires bound to the BUILD python, which is wrong here.

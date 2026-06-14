@@ -138,7 +138,7 @@ YEAR="$(date +%Y)"
 cat > "$STAGE/usr/share/doc/$PKG/copyright" <<COPY
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: priorstates
-Source: https://github.com/zqin2012/priorstates
+Source: https://github.com/priorstates-dev/priorstates
 
 Files: *
 Copyright: $YEAR Zhendong Qin
@@ -168,7 +168,7 @@ Installed-Size: $INSTALLED_KB
 Depends: python3 (>= 3.10), python3-pip, python3-venv, python3-numpy, python3-tk, python3-cryptography
 Suggests: pipx
 Conflicts: priorstates-hub
-Homepage: https://github.com/zqin2012/priorstates
+Homepage: https://github.com/priorstates-dev/priorstates
 Description: PriorStates — shared AI memory, research journal & cockpit
  PriorStates gives AI agents (Claude Code, VSCode Copilot, Cursor, Codex,
  Gemini, ...) a shared local memory, a research journal, runnable-Markdown

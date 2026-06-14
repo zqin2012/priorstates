@@ -8,7 +8,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![MCP-native](https://img.shields.io/badge/MCP-native-3fb950.svg)](https://modelcontextprotocol.io/)
 [![100% local](https://img.shields.io/badge/100%25-local-3fb950.svg)](#private-by-default)
-[![Stars](https://img.shields.io/github/stars/zqin2012/priorstates?style=social)](https://github.com/zqin2012/priorstates)
+[![Stars](https://img.shields.io/github/stars/priorstates-dev/priorstates?style=social)](https://github.com/priorstates-dev/priorstates)
 
 **Coding agents are amnesiacs** — every session starts cold, re-deriving what you
 already taught them and re-running experiments a past session already concluded.
@@ -68,7 +68,7 @@ sudo dnf install ./priorstates-0.1.14-1.noarch.rpm
 <summary><b>🪟 Windows — the one-click installer (easiest of all)</b></summary>
 
 Download and run
-**[PriorStates-Windows-Setup.exe](https://github.com/zqin2012/priorstates/releases/latest/download/PriorStates-Windows-Setup.exe)**
+**[PriorStates-Windows-Setup.exe](https://github.com/priorstates-dev/priorstates/releases/latest/download/PriorStates-Windows-Setup.exe)**
 — it auto-installs Python if you don't have it, then installs PriorStates and adds
 Start Menu + Desktop shortcuts. Nothing else required.
 </details>
@@ -77,7 +77,7 @@ Start Menu + Desktop shortcuts. Nothing else required.
 <summary><b>🍎 macOS / any OS with Python 3.10+ — pip</b></summary>
 
 ```bash
-PIP_BREAK_SYSTEM_PACKAGES=1 pip install --user --no-cache-dir "priorstates @ git+https://github.com/zqin2012/priorstates.git"
+PIP_BREAK_SYSTEM_PACKAGES=1 pip install --user --no-cache-dir "priorstates @ git+https://github.com/priorstates-dev/priorstates.git"
 priorstates init            # create ~/.priorstates + per-project .priorstates/
 priorstates agents install  # wire Claude / Codex / Gemini over MCP
 priorstates cockpit         # open the web cockpit → http://127.0.0.1:7700
