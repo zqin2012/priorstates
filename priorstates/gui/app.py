@@ -1511,11 +1511,23 @@ class PriorStatesGUI:
         self.run_bg(lambda: mem.reindex(_load(self._proj_local_path(self.project)), "all", verbose=False),
                     lambda r: self.set_status(f"reindexed: {r}"))
 
-    def download_model(self):
+    def download_model(self, multilingual=None):
         # Semantic recall needs BOTH the ONNX model AND the inference libs, so
         # install the libs and download the model. Capture all output to a buffer
         # (the GUI has no console, and _download_model prints non-ASCII).
-        self.set_status("enabling semantic recall: installing libraries + model (~130 MB)…")
+        if multilingual is None:
+            from tkinter import messagebox
+            multilingual = messagebox.askyesno(
+                "Choose embedding model",
+                "Download the multilingual model?\n\n"
+                "• Yes — multilingual (~130 MB): 50+ languages, cross-lingual recall "
+                "(an English query finds a Chinese/Russian/… memory).\n"
+                "• No — English-only (~127 MB): smaller, best for English work.",
+                parent=self.root)
+        model_name = ("paraphrase-multilingual-MiniLM-L12-v2" if multilingual
+                      else "bge-small-en-v1.5")
+        self.set_status(f"enabling semantic recall: installing libraries + model "
+                        f"({'multilingual ~130' if multilingual else 'English ~127'} MB)…")
 
         def work():
             import contextlib
@@ -1534,7 +1546,7 @@ class PriorStatesGUI:
                         except Exception as e:
                             print(f"could not install {lib}: {e}")
                 try:
-                    _download_model()
+                    _download_model(multilingual=bool(multilingual))
                 except Exception as e:
                     print(f"model download error: {e}")
             return buf.getvalue()
@@ -1544,7 +1556,7 @@ class PriorStatesGUI:
                 print(out)
             except Exception:
                 pass
-            onnx = self.cfg.home / "models" / "bge-small-en-v1.5" / "onnx" / "model.onnx"
+            onnx = self.cfg.home / "models" / model_name / "onnx" / "model.onnx"
             ok = onnx.exists() and onnx.stat().st_size > 1_000_000
             self.refresh_all()
             if ok:
