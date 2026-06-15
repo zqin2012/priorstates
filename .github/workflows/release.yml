@@ -43,6 +43,33 @@ jobs:
           fi
           echo "building v$VER"
 
+  # Publish the wheel + sdist to PyPI via Trusted Publishing (OIDC) — no API
+  # token, nothing stored in the repo. Runs ONLY on a real version tag, so manual
+  # single-platform `workflow_dispatch` builds don't publish. `skip-existing`
+  # makes re-runs idempotent. Requires a one-time PyPI trusted-publisher config
+  # (project "priorstates", owner "priorstates-dev", repo "priorstates",
+  # workflow "release.yml") — see packaging/PYPI_TRUSTED_PUBLISHING.md.
+  pypi:
+    needs: prep
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write        # OIDC token for PyPI; this job needs nothing else
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: build sdist + wheel
+        run: |
+          python -m pip install -q --upgrade build twine
+          python -m build
+          python -m twine check dist/*
+      - name: publish to PyPI (OIDC, no token)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+
   linux:
     needs: prep
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.only == '' || inputs.only == 'linux' }}
