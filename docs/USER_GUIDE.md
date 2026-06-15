@@ -138,6 +138,9 @@ priorstates memory delete prefers-bullets
   in `global`, project facts in `project`.
 - **Pinned** memories are injected into every agent session (the pinned block).
 - Agents do the same via the `memory_add` / `memory_search` MCP tools.
+- **Already used another agent's built-in memory?** `priorstates doctor` flags it,
+  and `priorstates memory import-native` pulls those entries into the shared store
+  (idempotent; `--dry-run` to preview) so every tool sees one memory.
 
 ## 5. The research journal
 
@@ -349,6 +352,7 @@ priorstates memory list [--scope ...]
 priorstates memory pin NAME [--unpin] [--scope ...]
 priorstates memory delete NAME [--scope ...]
 priorstates memory reindex [--scope ...]
+priorstates memory import-native [--scope global|project] [--overwrite] [--dry-run]   # pull another agent's built-in memory into the shared store
 
 priorstates journal add --topic T --outcome O --title TI [--body B] [--tag X ...] [--evidence E ...] [--supersedes ID]
 priorstates journal search [--topic T] [--outcome O] [--tag X] [--since D] [--until D] [--query Q] [-k N]

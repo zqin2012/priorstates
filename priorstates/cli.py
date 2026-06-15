@@ -419,6 +419,20 @@ def cmd_memory(args):
         from .core.capture import capture_memory
         text = args.text or sys.stdin.read()
         _print(capture_memory(cfg, text))
+    elif args.action == "import-native":
+        from .core.native import import_native
+        res = import_native(cfg, scope_override=args.scope,
+                            overwrite=args.overwrite, dry_run=args.dry_run)
+        if not res["sources"]:
+            print("no native agent memory found (looked for Claude Code's store).")
+            return
+        for s in res["sources"]:
+            print(f"source: {s['agent']}/{s['scope']}  ({s['count']} memories)  {s['dir']}")
+        verb = "would import" if args.dry_run else "imported"
+        print(f"{verb}: {len(res['imported'])}   skipped (already present): {len(res['skipped'])}"
+              + (f"   errors: {len(res['errors'])}" if res["errors"] else ""))
+        for nm, err in res["errors"]:
+            print(f"  !! {nm}: {err}")
 
 
 # --------------------------------------------------------------------------- #
@@ -910,6 +924,14 @@ def cmd_doctor(args):
     print(f"embedder:       {getattr(emb, 'backend', '?')} (dim={emb.dim})")
     if getattr(emb, "backend", "") == "hashing":
         print("                ↳ run `priorstates init --download-model` for semantic recall")
+    from .core.native import native_sources
+    nsrc = native_sources(cfg)
+    if nsrc:
+        total = sum(s["count"] for s in nsrc)
+        where = ", ".join(f"{s['agent']}/{s['scope']}" for s in nsrc)
+        print(f"native memory:  ⚠ {total} memor{'y' if total == 1 else 'ies'} in another "
+              f"agent's built-in store ({where}) — not shared with your other tools")
+        print("                ↳ bring them in: `priorstates memory import-native`")
     from .agents.install import mcp_importable
     mcp_ok = mcp_importable()
     print(f"mcp server:     {'runnable' if mcp_ok else 'NOT runnable — agents get no tools'}")
@@ -1372,6 +1394,12 @@ def build_parser():
     a = pms.add_parser("reindex"); a.add_argument("--scope", default="all")
     a = pms.add_parser("capture", help="add a memory from a free-text sentence")
     a.add_argument("text", nargs="?", help="plain-English memory (or piped on stdin)")
+    a = pms.add_parser("import-native",
+                       help="import another agent's built-in memory (e.g. Claude Code) into the shared store")
+    a.add_argument("--scope", default=None, choices=["global", "project"],
+                   help="force a scope (default: mirror each native store's scope)")
+    a.add_argument("--overwrite", action="store_true", help="replace existing memories of the same name")
+    a.add_argument("--dry-run", dest="dry_run", action="store_true", help="show what would import, write nothing")
     pm.set_defaults(func=cmd_memory)
 
     pj = sub.add_parser("journal", help="manage the research journal")
